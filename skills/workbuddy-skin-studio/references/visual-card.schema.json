@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["description", "palette", "lighting", "materials", "motifs", "readability"],
+  "properties": {
+    "description": { "type": "string", "minLength": 1 },
+    "palette": { "type": "object", "minProperties": 3, "additionalProperties": { "type": "string", "pattern": "^#[0-9a-fA-F]{6}$" } },
+    "lighting": { "type": "string", "minLength": 1 },
+    "materials": { "type": "array", "items": { "type": "string", "minLength": 1 }, "minItems": 1 },
+    "motifs": { "type": "array", "items": { "type": "string", "minLength": 1 }, "minItems": 1 },
+    "readability": { "type": "object", "required": ["wcag"], "properties": { "wcag": { "type": "object" } } }
+  }
+}

@@ -1,0 +1,7 @@
+Apache License
+                             Version 2.0, January 2004
+                         http://www.apache.org/licenses/
+
+This runtime may integrate with codedrobe-core under the Apache License, Version 2.0.
+The dependency must be installed locally at a fixed version; this project does not
+download dependencies, use npx, or enable network installation.

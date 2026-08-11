@@ -1,0 +1,27 @@
+{
+  "description": "明亮青春的 WorkBuddy 双平台主题",
+  "palette": {
+    "background": "#f8fbff",
+    "panel": "#ffffff",
+    "text": "#172033",
+    "muted": "#4d5d78",
+    "accent": "#155eef"
+  },
+  "lighting": "清透日光",
+  "materials": ["玻璃", "纸张"],
+  "motifs": ["天空", "舞台"],
+  "readability": {
+    "wcag": {
+      "normalTextBackground": 15,
+      "primaryGoal": 15,
+      "mutedPanel": 6,
+      "ui": 3,
+      "thresholds": {
+        "normalTextBackground": 4.5,
+        "primaryGoal": 7,
+        "mutedPanel": 4.5,
+        "ui": 3
+      }
+    }
+  }
+}

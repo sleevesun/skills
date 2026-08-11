@@ -1,0 +1,51 @@
+{
+  "schemaVersion": 1,
+  "themeId": "fixture-both",
+  "application": "workbuddy",
+  "displayName": "Fixture Both",
+  "version": "1.0.0",
+  "targetPlatforms": [
+    "macos",
+    "windows"
+  ],
+  "themePackage": "theme.codedrobe-theme",
+  "runtimeVersion": "1.0.0",
+  "requiresUserRestartConfirmation": true,
+  "files": [
+    "manifest.json",
+    "README.md",
+    "preview.svg",
+    "analysis/visual-card.json",
+    "theme.codedrobe-theme/theme.json",
+    "theme.codedrobe-theme/workbuddy.css",
+    "theme.codedrobe-theme/assets/hero.svg",
+    "targets/macos/prepare.command",
+    "targets/macos/apply.command",
+    "targets/macos/verify.command",
+    "targets/macos/restore.command",
+    "targets/windows/prepare.ps1",
+    "targets/windows/apply.ps1",
+    "targets/windows/verify.ps1",
+    "targets/windows/restore.ps1",
+    "runtime/runner.mjs",
+    "runtime/VERSION",
+    "checksums.sha256"
+  ],
+  "security": {
+    "allowRemoteResources": false,
+    "allowAppAsarWrites": false,
+    "allowUserPaths": false,
+    "allowSecrets": false,
+    "declarationOnlyTheme": true
+  },
+  "compatibility": {
+    "macos": {
+      "status": "pending-live-verification",
+      "workbuddy": "5.2.6"
+    },
+    "windows": {
+      "status": "not-live-verified",
+      "workbuddy": "unknown"
+    }
+  }
+}

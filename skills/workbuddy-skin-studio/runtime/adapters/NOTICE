@@ -1,0 +1,3 @@
+This adapter is designed to interoperate with CodeDrobe Core under its Apache-2.0 license.
+The runtime does not download CodeDrobe Core. A caller must provide a locally installed,
+version-locked dependency matching LOCKED_CORE_VERSION in codedrobe-core.mjs.

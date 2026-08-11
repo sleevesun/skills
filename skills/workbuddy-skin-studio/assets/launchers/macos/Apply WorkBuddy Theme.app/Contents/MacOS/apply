@@ -1,0 +1,17 @@
+#!/bin/zsh
+set -euo pipefail
+
+SCRIPT_DIR="$(/usr/bin/dirname -- "$0")"
+PACKAGE_ROOT="$SCRIPT_DIR/../Resources/workbuddy-skin-package"
+LOG_DIR="$HOME/Library/Logs/WorkBuddy Skin Studio"
+LOG_FILE="$LOG_DIR/one-click-apply.log"
+mkdir -p "$LOG_DIR"
+
+show_error() {
+  /usr/bin/osascript -e 'display dialog "WorkBuddy 主题应用失败。请查看 ~/Library/Logs/WorkBuddy Skin Studio/one-click-apply.log。" buttons {"好"} default button "好" with icon stop' >/dev/null 2>&1 || true
+}
+
+if ! WORKBUDDY_PACKAGE_DIR=. /bin/zsh "$PACKAGE_ROOT/targets/macos/apply.command" >"$LOG_FILE" 2>&1; then
+  show_error
+  exit 1
+fi

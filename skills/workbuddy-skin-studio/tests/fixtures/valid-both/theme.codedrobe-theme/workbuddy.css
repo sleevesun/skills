@@ -1,0 +1,15 @@
+:root {
+  --wb-background: #f8fbff;
+  --wb-panel: #ffffff;
+  --wb-text: #172033;
+  --wb-muted: #4d5d78;
+  --wb-accent: #155eef;
+}
+
+[data-wb-landmark=home] {
+  background: var(--wb-background);
+}
+
+[data-wb-landmark=hero] {
+  background-image: url("./assets/hero.svg");
+}

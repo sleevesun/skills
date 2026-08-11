@@ -1,0 +1,4 @@
+interface:
+  display_name: "Social Media Archive"
+  short_description: "Parse Douyin, Xiaohongshu, and Bilibili content into archived knowledge notes"
+  default_prompt: "Parse this social media link, summarize it into the standard knowledge-note format, and archive it into the right knowledge-base folder."

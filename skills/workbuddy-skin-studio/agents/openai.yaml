@@ -1,0 +1,4 @@
+interface:
+  display_name: "WorkBuddy Skin Studio"
+  short_description: "Build and validate portable WorkBuddy theme packages"
+  default_prompt: "Use $workbuddy-skin-studio to create and validate a portable WorkBuddy theme package from this image and theme brief."

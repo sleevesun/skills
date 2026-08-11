@@ -1,0 +1,35 @@
+{
+  "skill_name": "drawai-diagramming",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "参考 fixtures/reference.drawio 的形式，把 fixtures/sample-prd.md 里的审批流程重新画成 draw.io 文件，内容不要照搬参考图。",
+      "expected_output": "生成包含业务流程图和系统架构图的 .drawio 文件，形式参考输入图但业务内容独立。",
+      "files": [
+        "fixtures/reference.drawio",
+        "fixtures/sample-prd.md"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "我手动改了 fixtures/user-edited.drawio，帮我总结它和原图的差异，并把这些规律沉淀到之后画图的方法里。",
+      "expected_output": "输出结构层、布局层、连线层、视觉层和可复用规则的差异总结。",
+      "files": [
+        "fixtures/user-edited.drawio",
+        "fixtures/original.drawio"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "帮我用 DrawAI 画一个 HR 工单审批系统的流程图和架构图，要像产品方案里的图，不要像随便堆的盒子。",
+      "expected_output": "使用 draw.io MCP 创建两页图，采用角色/服务分层、语义配色、正交连线和可编辑分组。",
+      "files": []
+    },
+    {
+      "id": 4,
+      "prompt": "这份 PRD 的流程节点包含较长中文文案和多条跨泳道连线。请生成可编辑 draw.io 图，并确保文字居中且不溢出、连接线转弯自然、所有容器互不遮挡。",
+      "expected_output": "生成并导出通过版式验证的 .drawio 与预览图；节点显式设置对齐和换行，跨泳道连线固定端口与路径点，导出后无文本溢出、穿线或图形碰撞。",
+      "files": []
+    }
+  ]
+}

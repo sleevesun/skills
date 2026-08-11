@@ -1,0 +1,29 @@
+# Copy to one of:
+#   <project>/.social-media-archive.yaml
+#   ~/.config/social-media-archive/config.yaml
+# Keep the real config private when it contains personal paths.
+
+knowledge_base:
+  # Required. Absolute path or a path relative to the config file.
+  root: "/path/to/your/knowledge-base"
+
+  # Optional. Relative to root unless absolute.
+  index: "00_知识库目录索引.md"
+  inbox: "00_Inbox"
+
+  # Optional routing examples. Replace these with folders from your own index.
+  routes:
+    ai: "01_AI与Agent"
+    frontend: "02_前端工程与设计"
+    business: "03_HR与业务系统"
+    language: "04_语言与翻译"
+    system: "99_系统归档与索引"
+
+retrieval:
+  # Capability names are illustrative. The agent must map them to tools that
+  # are actually available in the current Codex environment.
+  preferred_capabilities:
+    xiaohongshu: ["note content", "comments"]
+    douyin: ["video metadata", "text extraction", "audio transcription"]
+    bilibili: ["video download", "audio transcription"]
+

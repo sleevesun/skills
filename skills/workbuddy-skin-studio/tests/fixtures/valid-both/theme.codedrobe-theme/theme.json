@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "id": "fixture-both",
+  "displayName": "Fixture Both",
+  "version": "1.0.0",
+  "targets": {
+    "workbuddy": {
+      "css": "workbuddy.css",
+      "verification": {
+        "required": [
+          "[data-wb-landmark=home]",
+          "[data-wb-landmark=chat]",
+          "[data-wb-landmark=composer]",
+          "[data-wb-landmark=sidebar]",
+          "[data-wb-landmark=task]",
+          "[data-wb-landmark=artifact]"
+        ],
+        "recommended": [
+          "[data-wb-landmark=header]"
+        ],
+        "contexts": [
+          "home",
+          "chat",
+          "task"
+        ]
+      }
+    }
+  }
+}

@@ -1,0 +1,4 @@
+interface:
+  display_name: "PRD UI Annotator"
+  short_description: "Map PRD requirements onto UI pages with numbered badges and rich tooltips"
+  default_prompt: "Annotate this page from the PRD, generate or update prd-annotations.json, write numbers back to the PRD, and verify the annotation interactions."
