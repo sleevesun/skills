@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { runtimeAsset } from "../scripts/bootstrap.mjs";
+import { resolveTarCommand, runtimeAsset } from "../scripts/bootstrap.mjs";
 
 test("selects a pinned Windows Node 24 prebuild", () => {
   const asset = runtimeAsset({ platform: "win32", arch: "x64", abi: "137" });
@@ -14,4 +14,24 @@ test("supports Apple Silicon and rejects an unpinned ABI", () => {
     () => runtimeAsset({ platform: "win32", arch: "x64", abi: "131" }),
     (error) => error.code === "UNSUPPORTED_RUNTIME"
   );
+});
+
+test("prefers Windows System32 bsdtar over the Git Bash PATH", () => {
+  const checked = [];
+  const command = resolveTarCommand({
+    platform: "win32",
+    env: { SystemRoot: "C:\\Windows" },
+    existsSync(candidate) {
+      checked.push(candidate);
+      return candidate === "C:\\Windows\\System32\\tar.exe";
+    }
+  });
+
+  assert.equal(command, "C:\\Windows\\System32\\tar.exe");
+  assert.deepEqual(checked, ["C:\\Windows\\System32\\tar.exe"]);
+});
+
+test("falls back safely when the Windows system tar is unavailable", () => {
+  assert.equal(resolveTarCommand({ platform: "win32", env: {}, existsSync: () => false }), "tar.exe");
+  assert.equal(resolveTarCommand({ platform: "darwin" }), "tar");
 });

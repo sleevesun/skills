@@ -54,6 +54,20 @@ export function runtimeAsset(options = {}) {
   };
 }
 
+export function resolveTarCommand(options = {}) {
+  const platform = options.platform || process.platform;
+  if (platform !== "win32") return "tar";
+
+  const env = options.env || process.env;
+  const existsSync = options.existsSync || fs.existsSync;
+  const windowsRoot = env.SystemRoot || env.SYSTEMROOT || env.WINDIR || env.windir || "";
+  if (windowsRoot) {
+    const systemTar = path.win32.join(windowsRoot, "System32", "tar.exe");
+    if (existsSync(systemTar)) return systemTar;
+  }
+  return "tar.exe";
+}
+
 export async function bootstrap(options = {}) {
   const skillRoot = options.skillRoot || SKILL_ROOT;
   const asset = runtimeAsset(options.runtime);
@@ -119,9 +133,13 @@ async function installNpmTarball(name, version, nodeModules, stage) {
 function extractArchive(archive, destination, stripComponents) {
   const args = ["-xzf", archive, "-C", destination];
   if (stripComponents) args.push(`--strip-components=${stripComponents}`);
-  const result = spawnSync("tar", args, { encoding: "utf8", windowsHide: true });
+  const tarCommand = resolveTarCommand();
+  const result = spawnSync(tarCommand, args, { encoding: "utf8", windowsHide: true });
   if (result.status !== 0) {
-    throw new WoaChatError("BOOTSTRAP_EXTRACT_FAILED", `无法解压 ${path.basename(archive)}：${String(result.stderr || "").trim()}`);
+    throw new WoaChatError(
+      "BOOTSTRAP_EXTRACT_FAILED",
+      `无法使用 ${tarCommand} 解压 ${path.basename(archive)}：${String(result.stderr || result.error || "").trim()}`
+    );
   }
 }
 

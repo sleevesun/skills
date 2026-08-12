@@ -26,6 +26,7 @@ bootstrap 不依赖 npm，它会：
 - 固定 npm 包版本，并校验 registry 提供的 integrity。
 - 按 `process.platform + process.arch + Node ABI` 选择官方预构建。
 - 校验预构建的固定 SHA-256。
+- 解压时优先显式调用 `%SystemRoot%\System32\tar.exe`（Windows 自带 bsdtar），避免 Git Bash 的 GNU tar 通过 `PATH` 抢占命令。
 - 只安装到当前 Skill 的 `node_modules`，不修改全局 Node 或 npm。
 
 支持 Node.js 22/24/26 的 x64/arm64 Windows 预构建。如系统 Node 版本不匹配，优先改用 Codex bundled Node runtime 执行 bootstrap 和后续命令。
@@ -34,6 +35,7 @@ bootstrap 不依赖 npm，它会：
 
 - `DEPENDENCY_MISSING`：运行 bootstrap；不要安装全局 native 包。
 - `UNSUPPORTED_RUNTIME`：改用 Node.js 22、24 或 26；同一个 native 模块不能在不同 Node ABI 间混用。
+- `BOOTSTRAP_EXTRACT_FAILED`：检查 `%SystemRoot%\System32\tar.exe` 是否存在。即使从 Git Bash 启动，bootstrap 也应优先使用该 Windows 自带 bsdtar，而不是 Git 目录中的 GNU tar。
 - `DPAPI_FAILED`：必须使用 WOA 数据所属的同一 Windows 用户运行。从另一设备或另一用户复制的加密文件无法解密。
 - `KEY_DECRYPT_FAILED`：检查 UID 和密钥文件是否属于同一账号。
 - `DATABASE_READ_FAILED`：命令会自动重试临时快照；持续失败时记录 WOA 版本和错误代码。
