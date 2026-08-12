@@ -1,0 +1,4 @@
+interface:
+  display_name: "WOA Chat Summary"
+  short_description: "按需读取并总结 macOS 或 Windows 的 WOA 聊天记录"
+  default_prompt: "Use $summarize-woa-chat to summarize this WOA group or contact for the requested time range."

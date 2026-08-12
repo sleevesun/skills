@@ -1,8 +1,8 @@
 # skills
 
-一组可复用、可独立安装的 Codex Skills，覆盖图示设计、PRD 页面标注、社交媒体知识归档和 WorkBuddy 主题制作。
+一组可复用、可独立安装的 Codex Skills，覆盖图示设计、PRD 页面标注、社交媒体知识归档、WOA 聊天总结和 WorkBuddy 主题制作。
 
-Reusable Codex skills for diagramming, PRD-to-UI annotation, social-media archiving, and WorkBuddy theme packaging.
+Reusable Codex skills for diagramming, PRD-to-UI annotation, social-media archiving, WOA chat summarization, and WorkBuddy theme packaging.
 
 ## 包含的 Skills
 
@@ -13,6 +13,7 @@ Reusable Codex skills for diagramming, PRD-to-UI annotation, social-media archiv
 | `workbuddy-skin-studio` | 生成、校验和打包 WorkBuddy `.wbtheme.zip` 主题 | Node.js、npm、已安装的 WorkBuddy |
 | `prd-ui-annotator` | 把 PRD 映射为页面编号标注、富文本提示和机器可读映射 | 目标前端项目及其现有构建工具 |
 | `social-media-archive` | 将抖音、小红书、Bilibili 等内容整理为知识库 Markdown | 至少一种内容抓取、转写或用户提供原文的方式 |
+| `summarize-woa-chat` | 在 macOS/Windows 上按群聊或联系人按需读取并总结 WOA 记录 | Node.js 22/24/26；Windows 首次使用需运行 bootstrap |
 
 每个目录都是独立 Skill，只包含运行所需的说明、元数据、脚本和参考资源。
 
@@ -38,7 +39,8 @@ python3 ~/.codex/skills/.system/skill-installer/scripts/install-skill-from-githu
     skills/drawai-diagramming \
     skills/workbuddy-skin-studio \
     skills/prd-ui-annotator \
-    skills/social-media-archive
+    skills/social-media-archive \
+    skills/summarize-woa-chat
 ```
 
 安装完成后，在下一轮 Codex 对话中即可使用。目标目录已经存在时，安装器会停止而不会覆盖；请先自行备份或移走旧版本。
@@ -76,11 +78,22 @@ Skill 会自动寻找 WorkBuddy。非标准安装位置可通过 `WORKBUDDY_APP`
 
 配置文件可能包含私人路径，默认不应提交到公开仓库。
 
+### summarize-woa-chat
+
+要求本机已安装 WOA，且当前系统用户已登录过。首次使用先在 Skill 目录执行：
+
+```bash
+node scripts/woa-chat.mjs doctor
+```
+
+Windows 如返回 `needs_bootstrap`，再执行 `node scripts/bootstrap.mjs`。该 bootstrap 不依赖 npm，只在 Skill 目录安装经完整性校验的固定版本 native 依赖。未指定时间时，Skill 默认按需读取最近 15 天，不创建定时任务或常驻缓存进程。
+
 ## 安全与隐私
 
 - 仓库不包含作者本机绝对路径、账号、Token、Cookie 或登录状态。
 - `social-media-archive` 只有在取得真实内容后才生成归档，不根据 URL 或标题猜测内容。
 - `workbuddy-skin-studio` 不修改 `app.asar`，不允许主题包执行任意脚本或加载远程资源，并要求用户确认重启和应用操作。
+- `summarize-woa-chat` 仅读取用户指定的会话和时间窗，不持久化密钥、Token 或签名 URL，不主动下载附件或发布总结。
 - 使用任何第三方平台抓取工具时，请遵守平台条款、版权要求和当地法律。
 
 ## 开发与验证
@@ -91,6 +104,8 @@ python3 ~/.codex/skills/.system/skill-creator/scripts/quick_validate.py skills/d
 python3 ~/.codex/skills/.system/skill-creator/scripts/quick_validate.py skills/workbuddy-skin-studio
 python3 ~/.codex/skills/.system/skill-creator/scripts/quick_validate.py skills/prd-ui-annotator
 python3 ~/.codex/skills/.system/skill-creator/scripts/quick_validate.py skills/social-media-archive
+python3 ~/.codex/skills/.system/skill-creator/scripts/quick_validate.py skills/summarize-woa-chat
+node --test skills/summarize-woa-chat/tests/*.test.mjs
 ```
 
 各 Skill 的专项测试和依赖要求以其 `SKILL.md` 为准。
@@ -102,4 +117,3 @@ python3 ~/.codex/skills/.system/skill-creator/scripts/quick_validate.py skills/s
 ## 许可
 
 本仓库采用 [MIT License](LICENSE)。第三方依赖保留各自许可；详见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
-

@@ -1,0 +1,19 @@
+{
+  "name": "summarize-woa-chat-skill",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "engines": {
+    "node": "22.x || 24.x || 26.x"
+  },
+  "scripts": {
+    "test": "node --test tests/*.test.mjs",
+    "doctor": "node scripts/woa-chat.mjs doctor"
+  },
+  "dependencies": {
+    "better-sqlite3-multiple-ciphers": "12.10.0",
+    "bindings": "1.5.0",
+    "file-uri-to-path": "1.0.0"
+  }
+}
