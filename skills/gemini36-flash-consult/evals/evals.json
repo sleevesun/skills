@@ -1,0 +1,50 @@
+{
+  "skill_name": "gemini36-flash-consult",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "我在设计一个新的内容生产 Skill，里面有几个方案拿不准。帮我把上下文打包给 Gemini 3.6 Flash 的扩展思考模式做严格评审，然后把意见合并成最终方案。",
+      "expected_output": "Uses Codex Chrome; confirms 3.6 Flash and extended thinking before sending; builds a high-quality context packet; returns a local adoption decision rather than treating Gemini as final authority.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "这个商业咨询问题有点复杂：我想把企业 AI 培训拆成公开课、闭门课、训练营和陪跑，你先自己判断，再请 Gemini 3.6 Flash 扩展思考挑最大漏洞。",
+      "expected_output": "Uses Codex Chrome for the consultation; verifies 3.6 Flash plus extended thinking; includes concrete business context and tradeoffs; asks for the biggest flaw and integrates the advice locally.",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "我有一份客户合同和报价单，里面有公司名、金额、联系人和微信。帮我整理关键上下文给 Gemini 3.6 Flash 扩展思考评估风险，但 token、cookie、私钥等凭据不要发。",
+      "expected_output": "Uses Codex Chrome; confirms 3.6 Flash and extended thinking; retains decision-relevant business facts; removes executable credentials; reports warnings without silently leaking them.",
+      "files": []
+    },
+    {
+      "id": 4,
+      "prompt": "请让 Gemini 3.6 Flash 扩展思考审查这个本地 Skill 目录，判断说明和源码的泛化能力。它需要看完整源码和说明。",
+      "expected_output": "Uses Codex Chrome for a 3.6 Flash extended-thinking consultation; uploads actual files or a Markdown bundle; verifies attachment names and composer text; never claims Gemini can read a local path by itself.",
+      "files": [
+        "/path/to/skills/example/SKILL.md",
+        "/path/to/skills/example/scripts/example.py"
+      ]
+    },
+    {
+      "id": 5,
+      "prompt": "Markdown 上下文包已经通过 Chrome 上传，附件卡片能看到，但 Gemini 输入框还是空的。继续完成 3.6 Flash 扩展思考咨询，不能发空提示词。",
+      "expected_output": "Uses Codex Chrome for a 3.6 Flash extended-thinking consultation; reacquires the composer after upload; verifies rendered text for a distinctive prefix and GEMINI36_FLASH_RESULT sentinel; never sends an empty or unverified packet.",
+      "files": ["/path/to/context-packet.md"]
+    },
+    {
+      "id": 6,
+      "prompt": "我点发送时 Chrome 连接重置了，现在不确定请求到底有没有发出去。恢复这次 Gemini 3.6 Flash 扩展思考咨询。",
+      "expected_output": "Uses Codex Chrome to recover the existing 3.6 Flash extended-thinking consultation; records UNKNOWN when the Send click cannot be proven; waits or extracts without opening a fresh consultation or sending a duplicate.",
+      "files": []
+    },
+    {
+      "id": 7,
+      "prompt": "Gemini 菜单里只看到了 3.5 Flash-Lite 和 3.1 Pro，没有 3.6 Flash 或扩展思考。请继续发消息。",
+      "expected_output": "Uses Codex Chrome to inspect the mode picker, then stops at the hard gate; does not silently substitute another model or base Flash; reports that 3.6 Flash plus extended thinking could not be verified.",
+      "files": []
+    }
+  ]
+}

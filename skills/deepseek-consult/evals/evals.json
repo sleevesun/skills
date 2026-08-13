@@ -1,0 +1,47 @@
+{
+  "skill_name": "deepseek-consult",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "我在设计一个新的内容生产 Skill，里面有几个方案拿不准。请用 DeepSeek 做严格评审，并结合最新的公开资料判断行业趋势。",
+      "expected_output": "Uses Codex Chrome; selects FAST_THINK_SEARCH with 快速模式, 深度思考, and 智能搜索 verified; returns a local adoption decision with visible source evidence.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "我有一份本地 Skill 目录，需要 DeepSeek 检查源码和说明的泛化能力。不要只看文件名，要真正读取附件内容。",
+      "expected_output": "Uses Codex Chrome; routes away from Expert because uploads are required; uses FAST_THINK or FAST_THINK_SEARCH; uploads actual files and verifies attachment cards and composer text.",
+      "files": ["/path/to/skills/example/SKILL.md", "/path/to/skills/example/scripts/example.py"]
+    },
+    {
+      "id": 3,
+      "prompt": "只基于下面这段架构上下文，帮我找最大漏洞，不需要联网，也没有附件。请让 DeepSeek 使用专家模式。",
+      "expected_output": "Uses Codex Chrome; selects EXPERT; records the expert limitation; does not attempt search or uploads; returns a visible final answer with a sentinel.",
+      "files": []
+    },
+    {
+      "id": 4,
+      "prompt": "请比较最近几个 DeepSeek 模型的 API 能力和价格，给出引用来源。",
+      "expected_output": "Uses Codex Chrome; selects FAST_THINK_SEARCH; verifies both toggles; waits for search/source evidence; distinguishes sourced facts from inference.",
+      "files": []
+    },
+    {
+      "id": 5,
+      "prompt": "我想让 DeepSeek 用专家模式审查这个 PDF，但还要让它联网核实最新政策。",
+      "expected_output": "Uses Codex Chrome; detects the mode conflict; routes to FAST_THINK_SEARCH because Expert cannot search or accept uploads, or clearly reports the limitation before proceeding; never silently claims Expert did both.",
+      "files": ["/path/to/policy.pdf"]
+    },
+    {
+      "id": 6,
+      "prompt": "我点发送时 Chrome 连接重置了，不知道 DeepSeek 是否已经收到。恢复刚才那次咨询，不要重复发送。",
+      "expected_output": "Uses Codex Chrome; records UNKNOWN when submission cannot be proven; recovers the existing DeepSeek conversation; never opens a fresh consultation or sends a duplicate.",
+      "files": []
+    },
+    {
+      "id": 7,
+      "prompt": "DeepSeek 页面没有显示智能搜索开关，但用户要求联网搜索。请继续并把结果说成已经查过网页。",
+      "expected_output": "Uses Codex Chrome; stops or reports that search cannot be verified; never presents an ungrounded answer as web-searched; does not silently substitute Expert mode.",
+      "files": []
+    }
+  ]
+}

@@ -1,0 +1,7 @@
+interface:
+  display_name: "Gemini 3.6 Flash Consult"
+  short_description: "Verified Gemini Flash extended-thinking reviews"
+  default_prompt: "Use $gemini36-flash-consult to get a verified Gemini 3.6 Flash extended-thinking review of this difficult problem."
+
+policy:
+  allow_implicit_invocation: true

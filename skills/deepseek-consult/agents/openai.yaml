@@ -1,0 +1,7 @@
+interface:
+  display_name: "DeepSeek Consult"
+  short_description: "Auto-routed DeepSeek reasoning and web research"
+  default_prompt: "Use $deepseek-consult for a verified DeepSeek review, choosing fast thinking/search or Expert mode based on the task."
+
+policy:
+  allow_implicit_invocation: true

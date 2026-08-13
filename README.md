@@ -1,8 +1,8 @@
 # skills
 
-一组可复用、可独立安装的 Codex Skills，覆盖图示设计、PRD 页面标注、社交媒体知识归档、WOA 聊天总结和 WorkBuddy 主题制作。
+一组可复用、可独立安装的 Codex Skills，覆盖图示设计、PRD 页面标注、社交媒体知识归档、WOA 聊天总结、WorkBuddy 主题制作和浏览器驱动的多模型咨询。
 
-Reusable Codex skills for diagramming, PRD-to-UI annotation, social-media archiving, WOA chat summarization, and WorkBuddy theme packaging.
+Reusable Codex skills for diagramming, PRD-to-UI annotation, social-media archiving, WOA chat summarization, WorkBuddy theme packaging, and browser-based multi-model consultation.
 
 ## 包含的 Skills
 
@@ -14,6 +14,9 @@ Reusable Codex skills for diagramming, PRD-to-UI annotation, social-media archiv
 | `prd-ui-annotator` | 把 PRD 映射为页面编号标注、富文本提示和机器可读映射 | 目标前端项目及其现有构建工具 |
 | `social-media-archive` | 将抖音、小红书、Bilibili 等内容整理为知识库 Markdown | 至少一种内容抓取、转写或用户提供原文的方式 |
 | `summarize-woa-chat` | 在 macOS/Windows 上按群聊或联系人按需读取并总结 WOA 记录 | Node.js 22/24/26；Windows 首次使用需运行 bootstrap |
+| `gpt56-sol-pro-consult` | 通过 ChatGPT Web 的 GPT 5.6 Sol Pro 获取结构化二次意见 | Codex Chrome 插件；ChatGPT 登录态和 Pro 模型权限 |
+| `gemini36-flash-consult` | 通过 Gemini Web 的 3.6 Flash + 扩展思考获取二次意见 | Codex Chrome 插件；Gemini 登录态和对应模型权限 |
+| `deepseek-consult` | 通过 DeepSeek Web 自动路由快速、深度思考和智能搜索/专家模式 | Codex Chrome 插件；DeepSeek 登录态 |
 
 每个目录都是独立 Skill，只包含运行所需的说明、元数据、脚本和参考资源。
 
@@ -40,7 +43,10 @@ python3 ~/.codex/skills/.system/skill-installer/scripts/install-skill-from-githu
     skills/workbuddy-skin-studio \
     skills/prd-ui-annotator \
     skills/social-media-archive \
-    skills/summarize-woa-chat
+    skills/summarize-woa-chat \
+    skills/gpt56-sol-pro-consult \
+    skills/gemini36-flash-consult \
+    skills/deepseek-consult
 ```
 
 安装完成后，在下一轮 Codex 对话中即可使用。目标目录已经存在时，安装器会停止而不会覆盖；请先自行备份或移走旧版本。
@@ -105,7 +111,13 @@ python3 ~/.codex/skills/.system/skill-creator/scripts/quick_validate.py skills/w
 python3 ~/.codex/skills/.system/skill-creator/scripts/quick_validate.py skills/prd-ui-annotator
 python3 ~/.codex/skills/.system/skill-creator/scripts/quick_validate.py skills/social-media-archive
 python3 ~/.codex/skills/.system/skill-creator/scripts/quick_validate.py skills/summarize-woa-chat
+python3 ~/.codex/skills/.system/skill-creator/scripts/quick_validate.py skills/gpt56-sol-pro-consult
+python3 ~/.codex/skills/.system/skill-creator/scripts/quick_validate.py skills/gemini36-flash-consult
+python3 ~/.codex/skills/.system/skill-creator/scripts/quick_validate.py skills/deepseek-consult
 node --test skills/summarize-woa-chat/tests/*.test.mjs
+python3 -m unittest discover -s skills/gpt56-sol-pro-consult/tests -v
+python3 -m unittest discover -s skills/gemini36-flash-consult/tests -v
+python3 -m unittest discover -s skills/deepseek-consult/tests -v
 ```
 
 各 Skill 的专项测试和依赖要求以其 `SKILL.md` 为准。
