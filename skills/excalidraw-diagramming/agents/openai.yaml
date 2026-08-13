@@ -1,4 +1,4 @@
 interface:
   display_name: "Excalidraw 图示规范"
-  short_description: "统一 Excalidraw 图形、颜色、连线与导出规范"
+  short_description: "使用 Diagram Design 创建可编辑 Excalidraw 图"
   default_prompt: "Use $excalidraw-diagramming to create a clear, editable Excalidraw diagram with consistent semantic styling."

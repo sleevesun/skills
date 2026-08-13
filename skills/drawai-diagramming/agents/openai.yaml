@@ -1,5 +1,4 @@
 interface:
   display_name: "DrawAI Diagramming"
-  short_description: "Create and validate polished editable draw.io diagrams"
+  short_description: "Create editable draw.io diagrams with Diagram Design"
   default_prompt: "Use $drawai-diagramming to create a polished, editable draw.io diagram from these materials."
-

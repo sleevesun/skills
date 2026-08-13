@@ -1,11 +1,33 @@
 ---
 name: excalidraw-diagramming
-description: "Create, edit, restyle, validate, and export editable Excalidraw diagrams. Use for .excalidraw files, converting Mermaid or text flows to Excalidraw, product and business flowcharts, architecture diagrams, decision trees, state diagrams, and requests about Excalidraw colors, shapes, connectors, spacing, visual consistency, or export quality."
+description: "Create, edit, restyle, validate, and export editable Excalidraw diagrams. Requires the diagram-design Codex plugin to be loaded in the current task. Use for .excalidraw files, converting Mermaid or text flows to Excalidraw, product and business flowcharts, architecture diagrams, decision trees, state diagrams, and requests about Excalidraw colors, shapes, connectors, spacing, visual consistency, or export quality."
 ---
 
 # Excalidraw Diagramming
 
 Create diagrams that are readable in product documents, easy to edit, and visually consistent. Treat color, shape, position, and line style as semantic information rather than decoration.
+
+## Required Dependency: Diagram Design
+
+Before inspecting inputs or creating, editing, restyling, or exporting a diagram:
+
+1. Inspect the active skill catalog for `diagram-design`, including the namespaced entry `diagram-design:diagram-design`.
+2. If the skill is not present in the active catalog or its `SKILL.md` cannot be read, stop before changing or producing a diagram. Tell the user that this skill requires Diagram Design. If the plugin is not installed and enabled, provide the installation commands below. If it is already installed and enabled, tell the user to start a new Codex task instead of reinstalling it:
+
+```bash
+codex plugin marketplace add cathrynlavery/diagram-design
+codex plugin add diagram-design@diagram-design
+```
+
+After installation, tell the user to start a new Codex task. Do not bypass this check by reading a versioned plugin cache path. A plugin installed on disk but absent from the current task's skill catalog is not loaded for that task.
+
+3. Read Diagram Design's `SKILL.md` completely. Follow its routing instructions to load `style-guide.md`, the selected `type-*.md`, and only the semantic, primitive, import, or animation references triggered by the task.
+4. Use Diagram Design as the primary source for diagram-type selection, semantic-pattern selection, content deletion, complexity budgets, brand tokens, visual hierarchy, focal emphasis, layout grammar, and universal anti-patterns.
+5. Keep this skill authoritative for Excalidraw JSON structure, native element capabilities, hand-drawn rendering constraints, editability, `.excalidraw` source-of-truth requirements, export behavior, and Excalidraw-specific validation.
+6. Resolve conflicts in this order: explicit user requirements; Excalidraw format, editability, readability, and validation constraints; representable Diagram Design rules; the existing default rules in this skill.
+7. Preserve `.excalidraw` as the editable deliverable. Do not switch to standalone HTML or SVG merely because Diagram Design is installed.
+
+When Diagram Design is loaded but has no applicable rule for an Excalidraw-specific detail, use the native rules below for that detail. Never claim Diagram Design was applied unless it was loaded and read in the current task.
 
 ## Standard workflow
 

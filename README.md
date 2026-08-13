@@ -8,8 +8,8 @@ Reusable Codex skills for diagramming, PRD-to-UI annotation, social-media archiv
 
 | Skill | 功能 | 额外依赖 |
 | --- | --- | --- |
-| `excalidraw-diagramming` | 创建、编辑、校验并导出可继续编辑的 Excalidraw 图 | 能处理 `.excalidraw` 和 SVG 的工具环境 |
-| `drawai-diagramming` | 创建、重构和校验 draw.io / DrawAI 图 | 推荐配置 draw.io MCP；基础 SVG 导出回退需要 Python 3 |
+| `excalidraw-diagramming` | 创建、编辑、校验并导出可继续编辑的 Excalidraw 图 | **必须先安装 Diagram Design 插件**；另需能处理 `.excalidraw` 和 SVG 的工具环境 |
+| `drawai-diagramming` | 创建、重构和校验 draw.io / DrawAI 图 | **必须先安装 Diagram Design 插件**；推荐配置 draw.io MCP；基础 SVG 导出回退需要 Python 3 |
 | `workbuddy-skin-studio` | 生成、校验和打包 WorkBuddy `.wbtheme.zip` 主题 | Node.js、npm、已安装的 WorkBuddy |
 | `prd-ui-annotator` | 把 PRD 映射为页面编号标注、富文本提示和机器可读映射 | 目标前端项目及其现有构建工具 |
 | `social-media-archive` | 将抖音、小红书、Bilibili 等内容整理为知识库 Markdown | 至少一种内容抓取、转写或用户提供原文的方式 |
@@ -22,14 +22,39 @@ Reusable Codex skills for diagramming, PRD-to-UI annotation, social-media archiv
 
 ## 安装
 
+### 图示 Skills 的强制前置依赖
+
+安装 `drawai-diagramming` 或 `excalidraw-diagramming` 前，先安装 [Diagram Design](https://github.com/cathrynlavery/diagram-design) 插件：
+
+```bash
+codex plugin marketplace add cathrynlavery/diagram-design
+codex plugin add diagram-design@diagram-design
+```
+
+使用下面的命令确认 `diagram-design@diagram-design` 显示为 `installed, enabled`：
+
+```bash
+codex plugin list
+```
+
+安装或升级插件后必须新建 Codex 任务，使 `diagram-design:diagram-design` 出现在该任务的可用 Skill 列表中。仅在磁盘上存在插件目录并不代表当前任务已经加载它；两份图示 Skill 遇到这种情况会停止绘图并提示安装或新建任务，不会静默退回旧规范。
+
+如需立即获取 Diagram Design 市场中的更新，可执行：
+
+```bash
+codex plugin marketplace upgrade diagram-design
+```
+
 ### 使用 Codex 自带的 Skill Installer
 
-安装单个 Skill：
+安装两个图示 Skills：
 
 ```bash
 python3 ~/.codex/skills/.system/skill-installer/scripts/install-skill-from-github.py \
   --repo sleevesun/skills \
-  --path skills/excalidraw-diagramming
+  --path \
+    skills/excalidraw-diagramming \
+    skills/drawai-diagramming
 ```
 
 一次安装全部 Skill：

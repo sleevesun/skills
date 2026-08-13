@@ -1,6 +1,6 @@
 ---
 name: drawai-diagramming
-description: "Use this skill whenever the user wants to create, refactor, restyle, compare, validate, or export draw.io / DrawAI diagrams. Trigger for requests mentioning drawio, draw.io, DrawAI, 架构图, 流程图, 状态流转图, 角色职责图, 页面逻辑图, or defects such as misaligned text, overflowing labels, overlapping connector segments, angled arrow entry, awkward connectors, or overlapping shapes. Use it for converting dense product requirements into polished multi-page diagrams and for matching a user-edited diagram's structure without copying its business content."
+description: "Use this skill whenever the user wants to create, refactor, restyle, compare, validate, or export draw.io / DrawAI diagrams. Requires the diagram-design Codex plugin to be loaded in the current task. Trigger for requests mentioning drawio, draw.io, DrawAI, 架构图, 流程图, 状态流转图, 角色职责图, 页面逻辑图, or defects such as misaligned text, overflowing labels, overlapping connector segments, angled arrow entry, awkward connectors, or overlapping shapes. Use it for converting dense product requirements into polished multi-page diagrams and for matching a user-edited diagram's structure without copying its business content."
 ---
 
 # DrawAI / draw.io Diagramming
@@ -8,6 +8,28 @@ description: "Use this skill whenever the user wants to create, refactor, restyl
 Use this skill to turn product, workflow, or architecture content into clear draw.io diagrams through the `mcp__drawio` MCP. The goal is not merely to generate boxes and arrows; the goal is to produce diagrams that feel like they belong in a product or architecture document: grouped, scannable, semantically colored, and easy for the user to edit later.
 
 This skill defines **diagramming method, layout grammar, visual style, composition, and quality rules**. It must not hard-code the business actors, page names, modules, systems, or process steps. Those must be derived from the user's actual business materials.
+
+## Required Dependency: Diagram Design
+
+Before inspecting inputs or creating, editing, restyling, or exporting a diagram:
+
+1. Inspect the active skill catalog for `diagram-design`, including the namespaced entry `diagram-design:diagram-design`.
+2. If the skill is not present in the active catalog or its `SKILL.md` cannot be read, stop before changing or producing a diagram. Tell the user that this skill requires Diagram Design. If the plugin is not installed and enabled, provide the installation commands below. If it is already installed and enabled, tell the user to start a new Codex task instead of reinstalling it:
+
+```bash
+codex plugin marketplace add cathrynlavery/diagram-design
+codex plugin add diagram-design@diagram-design
+```
+
+After installation, tell the user to start a new Codex task. Do not bypass this check by reading a versioned plugin cache path. A plugin installed on disk but absent from the current task's skill catalog is not loaded for that task.
+
+3. Read Diagram Design's `SKILL.md` completely. Follow its routing instructions to load `style-guide.md`, the selected `type-*.md`, and only the semantic, primitive, import, or animation references triggered by the task.
+4. Use Diagram Design as the primary source for diagram-type selection, semantic-pattern selection, content deletion, complexity budgets, brand tokens, visual hierarchy, focal emphasis, layout grammar, and universal anti-patterns.
+5. Keep this skill authoritative for draw.io MCP operations, mxGraph serialization, explicit ports and waypoints, native editability, `.drawio` source-of-truth requirements, export behavior, and draw.io-specific validation.
+6. Resolve conflicts in this order: explicit user requirements; draw.io format, editability, and validation constraints; representable Diagram Design rules; the existing default rules in this skill.
+7. Preserve `.drawio` as the editable deliverable. Do not switch to standalone HTML or SVG merely because Diagram Design is installed.
+
+When Diagram Design is loaded but has no applicable rule for a draw.io-specific detail, use the native rules below for that detail. Never claim Diagram Design was applied unless it was loaded and read in the current task.
 
 ## Core Principles
 
