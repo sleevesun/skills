@@ -17,6 +17,9 @@ Reusable Codex skills for diagramming, PRD-to-UI annotation, social-media archiv
 | `gpt56-sol-pro-consult` | 通过 ChatGPT Web 的 GPT 5.6 Sol Pro 获取结构化二次意见 | Codex Chrome 插件；ChatGPT 登录态和 Pro 模型权限 |
 | `gemini36-flash-consult` | 通过 Gemini Web 的 3.6 Flash + 扩展思考获取二次意见 | Codex Chrome 插件；Gemini 登录态和对应模型权限 |
 | `deepseek-consult` | 通过 DeepSeek Web 自动路由快速、深度思考和智能搜索/专家模式 | Codex Chrome 插件；DeepSeek 登录态 |
+| `archive-project` | 从任意项目提炼知识并编排中央入库、核心 Wiki 同步和发布闭环 | 可访问中央 HRIS 知识库仓库 |
+| `submit-knowledge` | 中央 HRIS 知识库的合规入库、双 commit 与统一发布守门员 | Git；中央仓中的 Wiki 更新器 |
+| `update-repowiki` | 用公开 Git/文件协议增量维护 Repo Wiki 与 Knowledge Card | 中央仓中的 `scripts/update_repowiki.py` |
 
 每个目录都是独立 Skill，只包含运行所需的说明、元数据、脚本和参考资源。
 
@@ -71,7 +74,10 @@ python3 ~/.codex/skills/.system/skill-installer/scripts/install-skill-from-githu
     skills/summarize-woa-chat \
     skills/gpt56-sol-pro-consult \
     skills/gemini36-flash-consult \
-    skills/deepseek-consult
+    skills/deepseek-consult \
+    skills/archive-project \
+    skills/submit-knowledge \
+    skills/update-repowiki
 ```
 
 安装完成后，在下一轮 Codex 对话中即可使用。目标目录已经存在时，安装器会停止而不会覆盖；请先自行备份或移走旧版本。
@@ -109,6 +115,18 @@ Skill 会自动寻找 WorkBuddy。非标准安装位置可通过 `WORKBUDDY_APP`
 
 配置文件可能包含私人路径，默认不应提交到公开仓库。
 
+### HRIS 知识闭环
+
+`archive-project` 是用户入口。用户只需提出“总结项目知识”“更新项目知识”或“项目归档”，Skill 会在内部衔接 `submit-knowledge` 与 `update-repowiki`。
+
+首次使用前设置中央知识库路径：
+
+```bash
+export HRIS_KNOWLEDGE_REPO="/path/to/hris-knowledge-repo"
+```
+
+目标仓库必须包含 `HR系统知识库/`、`.qoder/repowiki/` 和 `scripts/update_repowiki.py`，并配置指向 `cnb.cool/Chordsun/HRIS` 的 Git 远端。Skill 会从远端 URL 解析真实远端名，不假设远端叫 `origin`。本机绝对路径属于私人配置，不应提交到本仓库。
+
 ### summarize-woa-chat
 
 要求本机已安装 WOA，且当前系统用户已登录过。首次使用先在 Skill 目录执行：
@@ -139,6 +157,9 @@ python3 ~/.codex/skills/.system/skill-creator/scripts/quick_validate.py skills/s
 python3 ~/.codex/skills/.system/skill-creator/scripts/quick_validate.py skills/gpt56-sol-pro-consult
 python3 ~/.codex/skills/.system/skill-creator/scripts/quick_validate.py skills/gemini36-flash-consult
 python3 ~/.codex/skills/.system/skill-creator/scripts/quick_validate.py skills/deepseek-consult
+python3 ~/.codex/skills/.system/skill-creator/scripts/quick_validate.py skills/archive-project
+python3 ~/.codex/skills/.system/skill-creator/scripts/quick_validate.py skills/submit-knowledge
+python3 ~/.codex/skills/.system/skill-creator/scripts/quick_validate.py skills/update-repowiki
 node --test skills/summarize-woa-chat/tests/*.test.mjs
 python3 -m unittest discover -s skills/gpt56-sol-pro-consult/tests -v
 python3 -m unittest discover -s skills/gemini36-flash-consult/tests -v
