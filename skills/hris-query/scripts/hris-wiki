@@ -1,14 +1,16 @@
 #!/usr/bin/env python3
 """hris-wiki — 跨项目 HRIS 知识库只读查询 CLI。
 
-数据源：中央 HRIS 知识仓的本地 clone（Repo Wiki + Agent 知识卡 + 公共索引）。
+数据源：中央 HRIS 知识仓（Repo Wiki + Agent 知识卡 + 公共索引）。
 只读工具：只检索与输出，永不修改、提交或推送知识仓。
 
 定位知识仓（按优先级）：
   1. --repo <路径>（仅 query/show 等需要仓库的命令）
   2. 环境变量 HRIS_WIKI_REPO
   3. 环境变量 HRIS_KNOWLEDGE_REPO
-均未设置时报错并给出 clone 指引，不猜测本机路径。
+  4. 自动镜像：浅克隆 CNB 中央仓到 ~/.cache/hris-wiki/HRIS（可用
+     HRIS_WIKI_CACHE 覆盖缓存目录），每次运行时 git pull 保持新鲜；
+     私有仓需要本机已配置 CNB 访问凭据。
 
 用法：
   hris-wiki query <关键词>...        全文检索 Wiki 页面与知识卡（多词自动分词，OR 匹配）
@@ -21,24 +23,47 @@ import argparse
 import json
 import os
 import re
+import subprocess
 import sys
 from pathlib import Path
 
+DEFAULT_REMOTE = "https://cnb.cool/Chordsun/HRIS.git"
 REMOTE_HINT = "cnb.cool/Chordsun/HRIS"
+
+
+def mirror_dir() -> Path:
+    base = os.environ.get("HRIS_WIKI_CACHE") or str(Path.home() / ".cache" / "hris-wiki")
+    return Path(base).expanduser() / "HRIS"
+
+
+def ensure_mirror() -> Path:
+    dst = mirror_dir()
+    if (dst / ".git").is_dir():
+        pull = subprocess.run(
+            ["git", "-C", str(dst), "pull", "--ff-only", "--quiet"],
+            capture_output=True,
+            text=True,
+        )
+        if pull.returncode != 0:
+            print(f"WARNING: 镜像更新失败（离线或凭据过期），沿用现有副本：{dst}", file=sys.stderr)
+        return dst
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    print(f"首次使用：浅克隆 {DEFAULT_REMOTE} -> {dst} ...", file=sys.stderr)
+    clone = subprocess.run(["git", "clone", "--depth", "1", DEFAULT_REMOTE, str(dst)])
+    if clone.returncode != 0:
+        print(
+            "ERROR: 自动克隆失败。若该仓库为私有，请先配置 CNB 访问凭据"
+            "（git 登录态或 token），或向仓库管理员申请 cnb.cool/Chordsun/HRIS 的读取权限；"
+            "也可手动 clone 后设置 HRIS_WIKI_REPO。",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+    return dst
 
 
 def repo_root(explicit: str | None = None) -> Path:
     raw = explicit or os.environ.get("HRIS_WIKI_REPO") or os.environ.get("HRIS_KNOWLEDGE_REPO")
-    if not raw:
-        print(
-            "ERROR: 未设置知识仓路径。\n"
-            "请先 clone 中央 HRIS 知识仓（远端含 cnb.cool/Chordsun/HRIS，需要访问权限），然后：\n"
-            "  export HRIS_WIKI_REPO=/path/to/HRIS\n"
-            "或每次调用时传入 --repo /path/to/HRIS。",
-            file=sys.stderr,
-        )
-        sys.exit(1)
-    repo = Path(raw).expanduser()
+    repo = Path(raw).expanduser() if raw else ensure_mirror()
     if not repo.is_dir():
         print(f"ERROR: HRIS 知识仓目录不存在：{repo}", file=sys.stderr)
         sys.exit(1)

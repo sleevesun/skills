@@ -13,26 +13,21 @@ description: HRIS 知识库只读查询。任何涉及 HR 系统的问题（HCM/
 
 ## 前置条件
 
-1. 本机存在知识仓 clone，且包含 `.qoder/repowiki/` 目录。
-2. 已设置环境变量指向该 clone：
+默认零配置：CLI 首次运行时自动浅克隆 CNB 中央仓（`https://cnb.cool/Chordsun/HRIS.git`）到 `~/.cache/hris-wiki/HRIS`（可用 `HRIS_WIKI_CACHE` 覆盖缓存目录），之后每次运行自动 `git pull` 保持内容新鲜。
+
+若本机已有知识仓 clone，可显式指定以避免重复克隆：
 
 ```bash
 export HRIS_WIKI_REPO=/path/to/hris-knowledge-repo
 ```
 
-未 clone 时先执行（需要有该仓库的访问权限）：
+仓库为私有时，自动克隆需要本机已配置 CNB 访问凭据（git 登录态或 token）；克隆失败时向用户说明需申请 `cnb.cool/Chordsun/HRIS` 读取权限。无法访问知识库时，明确告知用户"未在本地知识库找到"，不得假装已检索，也不得猜测本机路径。
 
-```bash
-git clone https://cnb.cool/Chordsun/HRIS.git
-```
-
-3. 建议把本 Skill 自带的 CLI 链接到 PATH（一次性）：
+建议把本 Skill 自带的 CLI 链接到 PATH（一次性）：
 
 ```bash
 ln -sf "$SKILL_DIR/scripts/hris-wiki" ~/.local/bin/hris-wiki
 ```
-
-无法 clone（无权限）或路径缺失时，明确告知用户"未在本地知识库找到"，不得假装已检索，也不得猜测本机路径。
 
 ## 何时使用
 
@@ -75,7 +70,7 @@ hris-wiki repo                     # 输出知识仓根路径
 
 | 现象 | 处理 |
 |---|---|
-| 未设置 `HRIS_WIKI_REPO` | 提示用户 clone 并设置环境变量，不猜测路径 |
-| clone 无权限 | 提示用户向仓库管理员申请 `cnb.cool/Chordsun/HRIS` 访问权限 |
-| `.qoder/repowiki` 缺失 | 提示 clone 不完整，建议重新 clone 或 `git pull` |
+| 自动克隆失败 | 提示用户配置 CNB 凭据或向仓库管理员申请 `cnb.cool/Chordsun/HRIS` 访问权限 |
+| 镜像更新失败（离线/凭据过期） | CLI 会警告并沿用现有副本；回答时注明知识可能滞后 |
+| `.qoder/repowiki` 缺失 | 提示 clone 不完整，建议删除缓存目录重试或 `git pull` |
 | 检索全部无命中 | 明确声明未找到，再按通用知识作答 |

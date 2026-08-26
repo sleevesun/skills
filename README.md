@@ -20,7 +20,7 @@ Reusable Codex skills for diagramming, PRD-to-UI annotation, social-media archiv
 | `archive-project` | 从任意项目提炼知识并编排中央入库、核心 Wiki 同步和发布闭环 | 可访问中央 HRIS 知识库仓库 |
 | `submit-knowledge` | 中央 HRIS 知识库的合规入库、双 commit 与统一发布守门员 | Git；中央仓中的 Wiki 更新器 |
 | `update-repowiki` | 用公开 Git/文件协议增量维护 Repo Wiki 与 Knowledge Card | 中央仓中的 `scripts/update_repowiki.py` |
-| `hris-query` | HRIS 知识库只读查询：回答 HR 系统问题前先检索中央知识仓本地 clone | 中央 HRIS 知识库仓库的本地 clone（`HRIS_WIKI_REPO`） |
+| `hris-query` | HRIS 知识库只读查询：回答 HR 系统问题前先检索中央知识仓（自动浅克隆 CNB 镜像） | Git；`cnb.cool/Chordsun/HRIS` 读取权限（私有仓） |
 
 每个目录都是独立 Skill，只包含运行所需的说明、元数据、脚本和参考资源。
 
@@ -131,15 +131,14 @@ export HRIS_KNOWLEDGE_REPO="/path/to/hris-knowledge-repo"
 
 ### hris-query
 
-`hris-query` 是只读查询入口：Agent 回答 HRIS 业务问题前先检索中央知识仓的本地 clone。首次使用前：
+`hris-query` 是只读查询入口：Agent 回答 HRIS 业务问题前先检索中央知识仓。默认零配置——CLI 首次运行时自动浅克隆 `https://cnb.cool/Chordsun/HRIS.git` 到 `~/.cache/hris-wiki/HRIS`，之后每次运行自动拉取最新内容：
 
 ```bash
-git clone https://cnb.cool/Chordsun/HRIS.git /path/to/hris-knowledge-repo   # 需要仓库访问权限
-export HRIS_WIKI_REPO=/path/to/hris-knowledge-repo
 ln -sf ~/.codex/skills/hris-query/scripts/hris-wiki ~/.local/bin/hris-wiki
+hris-wiki query "试用期 评价开启"   # 首次运行自动克隆
 ```
 
-无 clone 权限时请向仓库管理员申请 `cnb.cool/Chordsun/HRIS` 的读取权限；该 Skill 只检索不写入。
+已有本地 clone 时可用 `HRIS_WIKI_REPO` 指定以避免重复克隆；缓存目录可用 `HRIS_WIKI_CACHE` 覆盖。仓库为私有时需先配置 CNB 访问凭据（git 登录态或 token），或向仓库管理员申请读取权限。该 Skill 只检索不写入。
 
 ### summarize-woa-chat
 
