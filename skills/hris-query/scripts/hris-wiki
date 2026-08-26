@@ -1,0 +1,201 @@
+#!/usr/bin/env python3
+"""hris-wiki — 跨项目 HRIS 知识库只读查询 CLI。
+
+数据源：中央 HRIS 知识仓的本地 clone（Repo Wiki + Agent 知识卡 + 公共索引）。
+只读工具：只检索与输出，永不修改、提交或推送知识仓。
+
+定位知识仓（按优先级）：
+  1. --repo <路径>（仅 query/show 等需要仓库的命令）
+  2. 环境变量 HRIS_WIKI_REPO
+  3. 环境变量 HRIS_KNOWLEDGE_REPO
+均未设置时报错并给出 clone 指引，不猜测本机路径。
+
+用法：
+  hris-wiki query <关键词>...        全文检索 Wiki 页面与知识卡（多词自动分词，OR 匹配）
+  hris-wiki cards [关键词]           列出知识卡索引（_index.yaml）
+  hris-wiki ref <源文件路径>         反查引用了某源文件的 Wiki 页面
+  hris-wiki show <页面相对路径>      输出页面全文（含 file:// 行级溯源）
+  hris-wiki repo                     输出知识仓根路径
+"""
+import argparse
+import json
+import os
+import re
+import sys
+from pathlib import Path
+
+REMOTE_HINT = "cnb.cool/Chordsun/HRIS"
+
+
+def repo_root(explicit: str | None = None) -> Path:
+    raw = explicit or os.environ.get("HRIS_WIKI_REPO") or os.environ.get("HRIS_KNOWLEDGE_REPO")
+    if not raw:
+        print(
+            "ERROR: 未设置知识仓路径。\n"
+            "请先 clone 中央 HRIS 知识仓（远端含 cnb.cool/Chordsun/HRIS，需要访问权限），然后：\n"
+            "  export HRIS_WIKI_REPO=/path/to/HRIS\n"
+            "或每次调用时传入 --repo /path/to/HRIS。",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+    repo = Path(raw).expanduser()
+    if not repo.is_dir():
+        print(f"ERROR: HRIS 知识仓目录不存在：{repo}", file=sys.stderr)
+        sys.exit(1)
+    wiki = repo / ".qoder" / "repowiki"
+    if not wiki.is_dir():
+        print(f"ERROR: {repo} 下未找到 .qoder/repowiki，请确认是 HRIS 知识仓的完整 clone。", file=sys.stderr)
+        sys.exit(1)
+    return repo
+
+
+def search_roots(repo: Path) -> list[Path]:
+    return [
+        repo / ".qoder" / "repowiki" / "knowledge" / "zh",
+        repo / ".qoder" / "repowiki" / "zh" / "content",
+    ]
+
+
+def tokenize(args: list[str]) -> list[str]:
+    return [t for a in args for t in a.split() if t]
+
+
+def cmd_query(args: argparse.Namespace) -> int:
+    keywords = tokenize(args.keywords)
+    if not keywords:
+        print("用法：hris-wiki query <关键词>...", file=sys.stderr)
+        return 2
+    repo = repo_root(args.repo)
+    pattern = re.compile("|".join(re.escape(k) for k in keywords), re.IGNORECASE)
+    hits, total = [], 0
+    for root in search_roots(repo):
+        if not root.is_dir():
+            continue
+        for md in sorted(root.rglob("*.md")):
+            rel = md.relative_to(repo)
+            file_hits = []
+            try:
+                for no, line in enumerate(md.read_text(encoding="utf-8").splitlines(), 1):
+                    if pattern.search(line):
+                        file_hits.append((no, line.strip()))
+                        total += 1
+            except OSError:
+                continue
+            if file_hits:
+                hits.append((rel, file_hits))
+    if not hits:
+        print(f"未命中关键词：{' '.join(keywords)}")
+        return 1
+    print(f"命中 {len(hits)} 个文件 / {total} 行（关键词：{' '.join(keywords)}）\n")
+    shown = 0
+    for rel, file_hits in hits:
+        if shown >= 20:
+            print(f"... 其余 {len(hits) - shown} 个文件省略，请用更精确的关键词")
+            break
+        print(f"## {rel}")
+        for no, line in file_hits[:6]:
+            text = line if len(line) <= 160 else line[:157] + "..."
+            print(f"  L{no}: {text}")
+        if len(file_hits) > 6:
+            print(f"  ... 另 {len(file_hits) - 6} 行，用 `hris-wiki show` 查看全文")
+        print()
+        shown += 1
+    print("提示：hris-wiki show <页面相对路径> 查看全文；hris-wiki ref <源文件> 反查引用。")
+    return 0
+
+
+def cmd_cards(args: argparse.Namespace) -> int:
+    keywords = tokenize(args.keywords)
+    repo = repo_root(args.repo)
+    index = repo / ".qoder" / "repowiki" / "knowledge" / "zh" / "_index.yaml"
+    if not index.is_file():
+        print(f"ERROR: 知识卡索引不存在：{index}", file=sys.stderr)
+        return 1
+    text = index.read_text(encoding="utf-8")
+    if keywords:
+        pattern = re.compile("|".join(re.escape(k) for k in keywords), re.IGNORECASE)
+        text = "\n".join(l for l in text.splitlines() if pattern.search(l)) or "（无匹配）"
+    print(text)
+    return 0
+
+
+def cmd_ref(args: argparse.Namespace) -> int:
+    repo = repo_root(args.repo)
+    src_index = repo / ".agent-wiki" / "source-index.json"
+    if not src_index.is_file():
+        print(f"ERROR: 公共索引不存在：{src_index}（知识仓可能不完整）", file=sys.stderr)
+        return 1
+    data = json.loads(src_index.read_text(encoding="utf-8"))
+    mapping = data.get("source_to_pages") or data.get("sources") or {}
+    target = args.source.lstrip("./")
+    pages = mapping.get(target) or mapping.get(f"/{target}")
+    if not pages:
+        fuzzy = {k: v for k, v in mapping.items() if target in k}
+        if fuzzy:
+            print(f"精确路径无映射，模糊匹配 {len(fuzzy)} 个源：")
+            for k, v in list(fuzzy.items())[:10]:
+                print(f"  {k}")
+                for p in v:
+                    print(f"    -> {p}")
+            return 0
+        print(f"没有 Wiki 页面引用源文件：{target}")
+        return 1
+    print(f"引用 {target} 的页面（{len(pages)} 个）：")
+    for p in pages:
+        print(f"  {p}")
+    return 0
+
+
+def cmd_show(args: argparse.Namespace) -> int:
+    repo = repo_root(args.repo)
+    page = (repo / args.page.lstrip("/")).resolve()
+    try:
+        page.relative_to(repo.resolve())
+    except ValueError:
+        print("ERROR: 页面路径必须位于知识仓内。", file=sys.stderr)
+        return 1
+    if not page.is_file():
+        print(f"ERROR: 页面不存在：{args.page}", file=sys.stderr)
+        return 1
+    sys.stdout.write(page.read_text(encoding="utf-8"))
+    return 0
+
+
+def cmd_repo(args: argparse.Namespace) -> int:
+    print(repo_root(args.repo))
+    return 0
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(
+        prog="hris-wiki",
+        description="跨项目 HRIS 知识库只读查询 CLI（Repo Wiki + 知识卡 + 公共索引）。",
+    )
+    parser.add_argument("--repo", help="知识仓路径（覆盖 HRIS_WIKI_REPO / HRIS_KNOWLEDGE_REPO）")
+    sub = parser.add_subparsers(dest="command", required=True)
+
+    p = sub.add_parser("query", help="全文检索 Wiki 页面与知识卡")
+    p.add_argument("keywords", nargs="+")
+    p.set_defaults(func=cmd_query)
+
+    p = sub.add_parser("cards", help="列出知识卡索引")
+    p.add_argument("keywords", nargs="*")
+    p.set_defaults(func=cmd_cards)
+
+    p = sub.add_parser("ref", help="反查引用某源文件的 Wiki 页面")
+    p.add_argument("source")
+    p.set_defaults(func=cmd_ref)
+
+    p = sub.add_parser("show", help="输出页面全文")
+    p.add_argument("page")
+    p.set_defaults(func=cmd_show)
+
+    p = sub.add_parser("repo", help="输出知识仓根路径")
+    p.set_defaults(func=cmd_repo)
+
+    args = parser.parse_args()
+    return args.func(args)
+
+
+if __name__ == "__main__":
+    sys.exit(main())

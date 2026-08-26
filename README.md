@@ -20,6 +20,7 @@ Reusable Codex skills for diagramming, PRD-to-UI annotation, social-media archiv
 | `archive-project` | 从任意项目提炼知识并编排中央入库、核心 Wiki 同步和发布闭环 | 可访问中央 HRIS 知识库仓库 |
 | `submit-knowledge` | 中央 HRIS 知识库的合规入库、双 commit 与统一发布守门员 | Git；中央仓中的 Wiki 更新器 |
 | `update-repowiki` | 用公开 Git/文件协议增量维护 Repo Wiki 与 Knowledge Card | 中央仓中的 `scripts/update_repowiki.py` |
+| `hris-query` | HRIS 知识库只读查询：回答 HR 系统问题前先检索中央知识仓本地 clone | 中央 HRIS 知识库仓库的本地 clone（`HRIS_WIKI_REPO`） |
 
 每个目录都是独立 Skill，只包含运行所需的说明、元数据、脚本和参考资源。
 
@@ -77,7 +78,8 @@ python3 ~/.codex/skills/.system/skill-installer/scripts/install-skill-from-githu
     skills/deepseek-consult \
     skills/archive-project \
     skills/submit-knowledge \
-    skills/update-repowiki
+    skills/update-repowiki \
+    skills/hris-query
 ```
 
 安装完成后，在下一轮 Codex 对话中即可使用。目标目录已经存在时，安装器会停止而不会覆盖；请先自行备份或移走旧版本。
@@ -127,6 +129,18 @@ export HRIS_KNOWLEDGE_REPO="/path/to/hris-knowledge-repo"
 
 目标仓库必须包含 `HR系统知识库/`、`.qoder/repowiki/` 和 `scripts/update_repowiki.py`，并配置指向 `cnb.cool/Chordsun/HRIS` 的 Git 远端。Skill 会从远端 URL 解析真实远端名，不假设远端叫 `origin`。本机绝对路径属于私人配置，不应提交到本仓库。
 
+### hris-query
+
+`hris-query` 是只读查询入口：Agent 回答 HRIS 业务问题前先检索中央知识仓的本地 clone。首次使用前：
+
+```bash
+git clone https://cnb.cool/Chordsun/HRIS.git /path/to/hris-knowledge-repo   # 需要仓库访问权限
+export HRIS_WIKI_REPO=/path/to/hris-knowledge-repo
+ln -sf ~/.codex/skills/hris-query/scripts/hris-wiki ~/.local/bin/hris-wiki
+```
+
+无 clone 权限时请向仓库管理员申请 `cnb.cool/Chordsun/HRIS` 的读取权限；该 Skill 只检索不写入。
+
 ### summarize-woa-chat
 
 要求本机已安装 WOA，且当前系统用户已登录过。首次使用先在 Skill 目录执行：
@@ -160,6 +174,7 @@ python3 ~/.codex/skills/.system/skill-creator/scripts/quick_validate.py skills/d
 python3 ~/.codex/skills/.system/skill-creator/scripts/quick_validate.py skills/archive-project
 python3 ~/.codex/skills/.system/skill-creator/scripts/quick_validate.py skills/submit-knowledge
 python3 ~/.codex/skills/.system/skill-creator/scripts/quick_validate.py skills/update-repowiki
+python3 ~/.codex/skills/.system/skill-creator/scripts/quick_validate.py skills/hris-query
 node --test skills/summarize-woa-chat/tests/*.test.mjs
 python3 -m unittest discover -s skills/gpt56-sol-pro-consult/tests -v
 python3 -m unittest discover -s skills/gemini36-flash-consult/tests -v
