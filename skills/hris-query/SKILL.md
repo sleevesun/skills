@@ -13,7 +13,7 @@ description: HRIS 知识库只读查询。任何涉及 HR 系统的问题（HCM/
 
 ## 前置条件
 
-默认零配置：CLI 首次运行时自动浅克隆 CNB 中央仓（`https://cnb.cool/Chordsun/HRIS.git`）到 `~/.cache/hris-wiki/HRIS`（可用 `HRIS_WIKI_CACHE` 覆盖缓存目录），之后每次运行自动 `git pull` 保持内容新鲜。
+默认零配置：CLI 首次运行时自动浅克隆 CNB 中央仓（`https://cnb.cool/Chordsun/HRIS.git`）到用户主目录下的 `~/.cache/hris-wiki/HRIS`（Windows 上即 `C:\Users\<you>\.cache\hris-wiki\HRIS`；可用 `HRIS_WIKI_CACHE` 覆盖缓存目录），之后每次运行自动 `git pull` 保持内容新鲜。
 
 若本机已有知识仓 clone，可显式指定以避免重复克隆：
 
@@ -21,13 +21,29 @@ description: HRIS 知识库只读查询。任何涉及 HR 系统的问题（HCM/
 export HRIS_WIKI_REPO=/path/to/hris-knowledge-repo
 ```
 
+Windows（cmd）下等价写法为 `set "HRIS_WIKI_REPO=C:\path\to\hris-knowledge-repo"`。
+
 仓库为私有时，自动克隆需要本机已配置 CNB 访问凭据（git 登录态或 token）；克隆失败时向用户说明需申请 `cnb.cool/Chordsun/HRIS` 读取权限。无法访问知识库时，明确告知用户"未在本地知识库找到"，不得假装已检索，也不得猜测本机路径。
 
-建议把本 Skill 自带的 CLI 链接到 PATH（一次性）：
+#### 链接到 PATH（可选，跨平台）
 
-```bash
-ln -sf "$SKILL_DIR/scripts/hris-wiki" ~/.local/bin/hris-wiki
-```
+- **macOS / Linux**（一次性）：
+
+  ```bash
+  ln -sf "$SKILL_DIR/scripts/hris-wiki" ~/.local/bin/hris-wiki
+  ```
+
+- **Windows**（无 `ln` / `~/.local/bin`，且 `python3` 通常不在 PATH）：
+  - 直接用 Python 运行脚本（推荐的手动使用方式）：
+
+    ```bat
+    python "%SKILL_DIR%\scripts\hris-wiki" query <关键词>
+    ```
+
+    `%SKILL_DIR%` 由 Skill 宿主注入；手动使用时替换为本机绝对路径，例如 `C:\Users\<you>\.workbuddy\skills\hris-query`。
+  - 或在 PATH 目录放一个 `hris-wiki.bat`（模板见 `scripts/hris-wiki.bat`），之后即可 `hris-wiki query <关键词>`。
+
+注意：脚本首行的 `#!/usr/bin/env python3` shebang 只在 macOS / Linux / Git Bash 下生效；Windows 原生 cmd / PowerShell 会忽略它，必须通过 `python`（或 `py`）显式调用，不能双击运行。
 
 ## 何时使用
 
@@ -43,7 +59,12 @@ hris-wiki show <页面相对路径>      # 读取页面全文（含 file:// 行�
 hris-wiki repo                     # 输出知识仓根路径
 ```
 
-未链接到 PATH 时可直接运行 `python3 "$SKILL_DIR/scripts/hris-wiki" ...`，或加 `--repo <路径>` 显式指定知识仓。
+未链接到 PATH 时直接运行脚本即可：
+
+- macOS / Linux：`python3 "$SKILL_DIR/scripts/hris-wiki" ...`
+- Windows：`python "%SKILL_DIR%\scripts\hris-wiki" ...`（`python3` 不可用时改用 `python` 或 `py`）
+
+两种写法均可加 `--repo <路径>` 显式指定知识仓。Agent 宿主（如 WorkBuddy）场景下，`SKILL_DIR` 由宿主解析提供，Agent 应使用宿主给出的绝对路径，不要自行拼接 `~` 或 `$SKILL_DIR`。
 
 ## 检索策略
 
