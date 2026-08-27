@@ -10,8 +10,9 @@
   3. 环境变量 HRIS_KNOWLEDGE_REPO
   4. 自动镜像：浅克隆 CNB 中央仓到 ~/.cache/hris-wiki/HRIS（可用
      HRIS_WIKI_CACHE 覆盖缓存目录），每次运行时 git pull 保持新鲜。
-     首次自动克隆需要身份认证：输入公司邮箱，仅 @pwrd.com 放行；
-     非交互环境可改用环境变量 HRIS_WIKI_EMAIL=<邮箱>。
+     首次自动克隆需要身份认证：输入公司邮箱（仅 @pwrd.com 放行）
+     和管理员发放的 CNB 只读令牌；非交互环境可改用环境变量
+     HRIS_WIKI_EMAIL=<邮箱> 与 HRIS_WIKI_TOKEN=<令牌>。
 
 用法：
   hris-wiki query <关键词>...        全文检索 Wiki 页面与知识卡（多词自动分词，OR 匹配）
@@ -32,9 +33,7 @@ from pathlib import Path
 DEFAULT_REMOTE = "https://cnb.cool/Chordsun/HRIS.git"
 REMOTE_HINT = "cnb.cool/Chordsun/HRIS"
 ALLOWED_EMAIL_SUFFIX = "@pwrd.com"
-# 内置只读令牌：仅供 @pwrd.com 内部用户拉取知识库使用。
-# 注意：本令牌随仓库公开分发，只能视为"内部便利"，不构成访问控制。
-EMBEDDED_CREDENTIAL = {"username": "cnb", "token": "3ANj19ceI0GqGnsibTQOwqy8DWA"}
+ADMIN_HINT = "请联系知识库管理员获取 cnb.cool/Chordsun/HRIS 的只读访问令牌"
 
 
 def cache_base() -> Path:
@@ -56,56 +55,66 @@ def load_auth() -> dict | None:
     except (OSError, ValueError):
         return None
     email = str(data.get("email", "")).strip().lower()
-    if email.endswith(ALLOWED_EMAIL_SUFFIX):
+    if email.endswith(ALLOWED_EMAIL_SUFFIX) and data.get("token"):
         return data
     return None
 
 
+def prompt(message: str) -> str:
+    if not sys.stdin.isatty():
+        return ""
+    print(message, file=sys.stderr)
+    try:
+        return input().strip()
+    except EOFError:
+        return ""
+
+
 def ensure_auth() -> dict:
-    """首次使用时要求公司邮箱认证，通过后把用户名与令牌保存到本地。"""
+    """首次使用时要求公司邮箱认证并提供管理员发放的只读令牌，通过后保存到本地。"""
     auth = load_auth()
     if auth:
         return auth
-    email = os.environ.get("HRIS_WIKI_EMAIL", "").strip()
-    if not email:
-        if sys.stdin.isatty():
-            print("首次使用需要身份认证，请输入你的公司邮箱（仅限 @pwrd.com）：", file=sys.stderr)
-            try:
-                email = input().strip()
-            except EOFError:
-                email = ""
-        else:
-            print(
-                "ERROR: 首次使用需要身份认证：请设置 HRIS_WIKI_EMAIL=<你的公司邮箱>"
-                "（仅限 @pwrd.com）后重试。",
-                file=sys.stderr,
-            )
-            sys.exit(1)
+    interactive = sys.stdin.isatty()
+
+    email = os.environ.get("HRIS_WIKI_EMAIL", "").strip() or prompt(
+        "首次使用需要身份认证，请输入你的公司邮箱（仅限 @pwrd.com）："
+    )
     if not email.lower().endswith(ALLOWED_EMAIL_SUFFIX):
         print(
             f"ERROR: 认证失败：本知识库仅对公司内部开放（邮箱须以 {ALLOWED_EMAIL_SUFFIX} 结尾）。",
             file=sys.stderr,
         )
         sys.exit(1)
-    auth = {
-        "email": email,
-        "username": EMBEDDED_CREDENTIAL["username"],
-        "token": EMBEDDED_CREDENTIAL["token"],
-    }
+
+    token = os.environ.get("HRIS_WIKI_TOKEN", "").strip()
+    if not token:
+        token = prompt(f"请输入知识库管理员发放的 CNB 只读令牌（{ADMIN_HINT}）：")
+    username = os.environ.get("HRIS_WIKI_USERNAME", "").strip()
+    if not username:
+        username = prompt("请输入令牌对应的 Git 用户名（不确定时直接回车，默认 cnb）：") or "cnb"
+    if not token:
+        print(
+            "ERROR: 未提供访问令牌。"
+            + ("非交互环境请设置 HRIS_WIKI_TOKEN=<令牌>（可选 HRIS_WIKI_USERNAME）。" if not interactive else "")
+            + f"{ADMIN_HINT}。",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    auth = {"email": email, "username": username, "token": token}
     auth_path().parent.mkdir(parents=True, exist_ok=True)
     auth_path().write_text(json.dumps(auth, ensure_ascii=False, indent=2), encoding="utf-8")
     try:
         os.chmod(auth_path(), stat.S_IRUSR | stat.S_IWUSR)
     except OSError:
         pass
-    print(f"认证通过（{email}），凭据已保存，今后无需再次认证。", file=sys.stderr)
+    print(f"认证通过（{email}），凭据已保存到 {auth_path()}，今后无需再次认证。", file=sys.stderr)
     return auth
 
 
 def authed_remote(auth: dict) -> str:
-    user = auth.get("username") or EMBEDDED_CREDENTIAL["username"]
-    token = auth.get("token") or EMBEDDED_CREDENTIAL["token"]
-    return f"https://{user}:{token}@cnb.cool/Chordsun/HRIS.git"
+    return f"https://{auth['username']}:{auth['token']}@cnb.cool/Chordsun/HRIS.git"
 
 
 def ensure_mirror() -> Path:
@@ -130,8 +139,8 @@ def ensure_mirror() -> Path:
     clone = subprocess.run(["git", "clone", "--depth", "1", remote_url, str(dst)])
     if clone.returncode != 0:
         print(
-            "ERROR: 自动克隆失败。请确认邮箱认证已通过，或向仓库管理员申请 "
-            "cnb.cool/Chordsun/HRIS 的读取权限；也可手动 clone 后设置 HRIS_WIKI_REPO。",
+            "ERROR: 自动克隆失败。请确认令牌有效且具有读取权限；"
+            f"令牌无效或已过期时{ADMIN_HINT}；也可手动 clone 后设置 HRIS_WIKI_REPO。",
             file=sys.stderr,
         )
         sys.exit(1)
