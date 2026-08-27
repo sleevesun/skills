@@ -15,7 +15,24 @@ description: HRIS 知识库只读查询。任何涉及 HR 系统的问题（HCM/
 
 默认零配置：CLI 首次运行时自动浅克隆 CNB 中央仓（`https://cnb.cool/Chordsun/HRIS.git`）到用户主目录下的 `~/.cache/hris-wiki/HRIS`（Windows 上即 `C:\Users\<you>\.cache\hris-wiki\HRIS`；可用 `HRIS_WIKI_CACHE` 覆盖缓存目录），之后每次运行自动 `git pull` 保持内容新鲜。
 
-若本机已有知识仓 clone，可显式指定以避免重复克隆：
+### 首次使用：公司邮箱认证
+
+首次自动克隆前会要求身份认证：
+
+1. 交互式终端会提示输入公司邮箱；非交互环境（Agent、CI、脚本）请设置 `HRIS_WIKI_EMAIL=<邮箱>`；
+2. 仅接受以 `@pwrd.com` 结尾的邮箱，其他邮箱一律拒绝；
+3. 认证通过后，用户名与只读令牌保存到 `~/.cache/hris-wiki/auth.json`（权限 600），今后无需再次认证。
+
+```bash
+# 非交互环境示例
+export HRIS_WIKI_EMAIL=yourname@pwrd.com
+hris-wiki query 试用期转正
+```
+
+> 注意：该认证只是使用引导层面的门槛；内置的只读令牌随本仓库公开分发，
+> 不构成真正的访问控制，请勿将知识库内容转发给公司外部。
+
+若本机已有知识仓 clone，可显式指定以避免触发自动克隆与认证：
 
 ```bash
 export HRIS_WIKI_REPO=/path/to/hris-knowledge-repo
@@ -23,7 +40,7 @@ export HRIS_WIKI_REPO=/path/to/hris-knowledge-repo
 
 Windows（cmd）下等价写法为 `set "HRIS_WIKI_REPO=C:\path\to\hris-knowledge-repo"`。
 
-仓库为私有时，自动克隆需要本机已配置 CNB 访问凭据（git 登录态或 token）；克隆失败时向用户说明需申请 `cnb.cool/Chordsun/HRIS` 读取权限。无法访问知识库时，明确告知用户"未在本地知识库找到"，不得假装已检索，也不得猜测本机路径。
+自动克隆所需的只读令牌已内置于 CLI，通过邮箱认证后即可使用；克隆失败时向用户说明并检查邮箱认证状态或网络。无法访问知识库时，明确告知用户"未在本地知识库找到"，不得假装已检索，也不得猜测本机路径。
 
 #### 链接到 PATH（可选，跨平台）
 
@@ -91,7 +108,7 @@ hris-wiki repo                     # 输出知识仓根路径
 
 | 现象 | 处理 |
 |---|---|
-| 自动克隆失败 | 提示用户配置 CNB 凭据或向仓库管理员申请 `cnb.cool/Chordsun/HRIS` 访问权限 |
-| 镜像更新失败（离线/凭据过期） | CLI 会警告并沿用现有副本；回答时注明知识可能滞后 |
+| 自动克隆失败 | 确认邮箱认证已通过（`@pwrd.com`）、网络可达；仍失败则向仓库管理员确认仓库状态 |
+| 镜像更新失败（离线/令牌失效） | CLI 会警告并沿用现有副本；回答时注明知识可能滞后；令牌失效需联系仓库管理员更换内置令牌 |
 | `.qoder/repowiki` 缺失 | 提示 clone 不完整，建议删除缓存目录重试或 `git pull` |
 | 检索全部无命中 | 明确声明未找到，再按通用知识作答 |

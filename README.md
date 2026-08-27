@@ -20,7 +20,7 @@ Reusable Codex skills for diagramming, PRD-to-UI annotation, social-media archiv
 | `archive-project` | 从任意项目提炼知识并编排中央入库、核心 Wiki 同步和发布闭环 | 可访问中央 HRIS 知识库仓库 |
 | `submit-knowledge` | 中央 HRIS 知识库的合规入库、双 commit 与统一发布守门员 | Git；中央仓中的 Wiki 更新器 |
 | `update-repowiki` | 用公开 Git/文件协议增量维护 Repo Wiki 与 Knowledge Card | 中央仓中的 `scripts/update_repowiki.py` |
-| `hris-query` | HRIS 知识库只读查询：回答 HR 系统问题前先检索中央知识仓（自动浅克隆 CNB 镜像） | Git；`cnb.cool/Chordsun/HRIS` 读取权限（私有仓） |
+| `hris-query` | HRIS 知识库只读查询：回答 HR 系统问题前先检索中央知识仓（首次邮箱认证后自动浅克隆 CNB 镜像） | Git；`@pwrd.com` 公司邮箱（首次认证） |
 
 每个目录都是独立 Skill，只包含运行所需的说明、元数据、脚本和参考资源。
 
@@ -135,10 +135,10 @@ export HRIS_KNOWLEDGE_REPO="/path/to/hris-knowledge-repo"
 
 ```bash
 ln -sf ~/.codex/skills/hris-query/scripts/hris-wiki ~/.local/bin/hris-wiki
-hris-wiki query "试用期 评价开启"   # 首次运行自动克隆
+hris-wiki query "试用期 评价开启"   # 首次运行先做邮箱认证，再自动克隆
 ```
 
-已有本地 clone 时可用 `HRIS_WIKI_REPO` 指定以避免重复克隆；缓存目录可用 `HRIS_WIKI_CACHE` 覆盖。仓库为私有时需先配置 CNB 访问凭据（git 登录态或 token），或向仓库管理员申请读取权限。该 Skill 只检索不写入。
+首次使用需要公司邮箱认证：交互式终端会提示输入邮箱，非交互环境设置 `HRIS_WIKI_EMAIL=<邮箱>`；仅接受 `@pwrd.com` 后缀，通过后只读令牌保存到本地 `~/.cache/hris-wiki/auth.json`，今后免认证。注意这只是使用引导层面的门槛——内置令牌随本仓库公开分发，不构成真正的访问控制。已有本地 clone 时可用 `HRIS_WIKI_REPO` 指定以避免触发认证与克隆；缓存目录可用 `HRIS_WIKI_CACHE` 覆盖。该 Skill 只检索不写入。
 
 ### summarize-woa-chat
 
