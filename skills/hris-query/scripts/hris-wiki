@@ -1,8 +1,14 @@
 #!/usr/bin/env python3
 """hris-wiki — 跨项目 HRIS 知识库只读查询 CLI。
 
-数据源：中央 HRIS 知识仓（Repo Wiki + Agent 知识卡 + 公共索引）。
-只读工具：只检索与输出，永不修改、提交或推送知识仓。
+数据源分层（按权威度排序，query 输出自动标注）：
+  ① 权威知识库   HR系统知识库/            现行权威口径，引用优先
+  ② Repo Wiki    .qoder/repowiki/         派生 Wiki 页面与 Agent 知识卡
+  ③ 历史归档摘要 各系统历史文档/          历史口径（2019-2024），引用注意时效
+  ④ 进行中文档   进行中项目文档/          在途未定稿（默认不搜，--all 开启）
+
+只读工具：只检索与输出；唯一的 git 写盘动作是本地镜像的克隆与快进更新，
+永不修改知识仓内容、永不 commit / push。
 
 定位知识仓（按优先级）：
   1. --repo <路径>（仅 query/show 等需要仓库的命令）
@@ -10,14 +16,17 @@
   3. 环境变量 HRIS_KNOWLEDGE_REPO
   4. 自动镜像：浅克隆 CNB 中央仓到 ~/.cache/hris-wiki/HRIS（可用
      HRIS_WIKI_CACHE 覆盖缓存目录），每次运行时 git pull 保持新鲜。
-     首次自动克隆需要身份认证：输入公司邮箱（仅 @pwrd.com 放行）
-     和管理员发放的 CNB 只读令牌；非交互环境可改用环境变量
-     HRIS_WIKI_EMAIL=<邮箱> 与 HRIS_WIKI_TOKEN=<令牌>。
+     首次自动克隆需要身份认证：由用户输入公司邮箱（仅 @pwrd.com 放行）
+     和管理员发放的 CNB 只读令牌；令牌经用户输入后保存到
+     ~/.cache/hris-wiki/auth.json（权限 600）并用于镜像更新；
+     非交互环境可改用环境变量 HRIS_WIKI_EMAIL=<邮箱> 与
+     HRIS_WIKI_TOKEN=<令牌>。
 
 用法：
-  hris-wiki query <关键词>...        全文检索 Wiki 页面与知识卡（多词自动分词，OR 匹配）
+  hris-wiki query [--or] [--all] <关键词>...
+                                     全文检索（默认多词 AND，--or 任一命中）
   hris-wiki cards [关键词]           列出知识卡索引（_index.yaml）
-  hris-wiki ref <源文件路径>         反查引用了某源文件的 Wiki 页面
+  hris-wiki ref <源文件或目录路径>   反查引用某源文件/目录的 Wiki 页面
   hris-wiki show <页面相对路径>      输出页面全文（含 file:// 行级溯源）
   hris-wiki repo                     输出知识仓根路径
 """
@@ -34,6 +43,9 @@ DEFAULT_REMOTE = "https://cnb.cool/Chordsun/HRIS.git"
 REMOTE_HINT = "cnb.cool/Chordsun/HRIS"
 ALLOWED_EMAIL_SUFFIX = "@pwrd.com"
 ADMIN_HINT = "请联系知识库管理员获取 cnb.cool/Chordsun/HRIS 的只读访问令牌"
+TIER_LABELS = {1: "① 权威知识库", 2: "② Repo Wiki", 3: "③ 历史归档", 4: "④ 进行中文档"}
+# macOS iCloud 占位文件标记：读取会阻塞在云端取回，必须跳过
+SF_DATALESS = 0x40000000
 
 
 def cache_base() -> Path:
@@ -160,50 +172,118 @@ def repo_root(explicit: str | None = None) -> Path:
     return repo
 
 
-def search_roots(repo: Path) -> list[Path]:
-    return [
-        repo / ".qoder" / "repowiki" / "knowledge" / "zh",
-        repo / ".qoder" / "repowiki" / "zh" / "content",
+def search_roots(repo: Path, all_layers: bool = False) -> list[tuple[int, Path]]:
+    roots = [
+        (1, repo / "HR系统知识库"),
+        (2, repo / ".qoder" / "repowiki" / "knowledge" / "zh"),
+        (2, repo / ".qoder" / "repowiki" / "zh" / "content"),
+        (3, repo / "各系统历史文档"),
     ]
+    if all_layers:
+        roots.append((4, repo / "进行中项目文档"))
+    return roots
 
 
 def tokenize(args: list[str]) -> list[str]:
     return [t for a in args for t in a.split() if t]
 
 
+def is_dataless(md: Path) -> bool:
+    try:
+        return bool(md.stat().st_flags & SF_DATALESS)
+    except (AttributeError, OSError):
+        return False
+
+
+def last_commit_dates(repo: Path, rels: list[str], timed_out: list[bool]) -> dict[str, str]:
+    """单次 git 调用批量取多个路径的最后提交年月。
+
+    git 遍历树对象时若碰到云端未取回的对象会阻塞，
+    因此必须整体限时并降级，而不是逐文件无限等待。
+    浅克隆（自动镜像默认 --depth 1）看不到完整历史，直接返回空，
+    避免所有文件都显示克隆日期造成假时效。
+    """
+    result: dict[str, str] = {}
+    if not rels or (repo / ".git" / "shallow").exists():
+        return result
+    try:
+        r = subprocess.run(
+            ["git", "-c", "core.quotepath=false", "log", "--format=%cs", "--name-only", "--"] + rels,
+            cwd=repo, capture_output=True, text=True, timeout=15,
+        )
+    except (subprocess.TimeoutExpired, OSError):
+        timed_out.append(True)
+        return result
+    if r.returncode != 0:
+        timed_out.append(True)
+        return result
+    date = None
+    for line in r.stdout.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        if re.fullmatch(r"\d{4}-\d{2}-\d{2}", line):
+            date = line[:7]
+        elif date and line not in result:
+            result[line] = date
+    return result
+
+
 def cmd_query(args: argparse.Namespace) -> int:
     keywords = tokenize(args.keywords)
     if not keywords:
-        print("用法：hris-wiki query <关键词>...", file=sys.stderr)
+        print("用法：hris-wiki query [--or] [--all] <关键词>...", file=sys.stderr)
         return 2
     repo = repo_root(args.repo)
-    pattern = re.compile("|".join(re.escape(k) for k in keywords), re.IGNORECASE)
-    hits, total = [], 0
-    for root in search_roots(repo):
+    regexes = [re.compile(re.escape(k), re.IGNORECASE) for k in keywords]
+    hits: list[tuple[int, Path, list[tuple[int, str]]]] = []
+    total = 0
+    skipped_dataless = 0
+    for tier, root in search_roots(repo, all_layers=args.all_layers):
         if not root.is_dir():
             continue
         for md in sorted(root.rglob("*.md")):
+            if is_dataless(md):
+                skipped_dataless += 1
+                continue
             rel = md.relative_to(repo)
             file_hits = []
+            keywords_seen = set()
             try:
                 for no, line in enumerate(md.read_text(encoding="utf-8").splitlines(), 1):
-                    if pattern.search(line):
+                    matched = [i for i, rx in enumerate(regexes) if rx.search(line)]
+                    if matched:
+                        keywords_seen.update(matched)
                         file_hits.append((no, line.strip()))
                         total += 1
             except OSError:
                 continue
-            if file_hits:
-                hits.append((rel, file_hits))
+            if not file_hits:
+                continue
+            if not args.any_match and len(keywords_seen) < len(keywords):
+                continue
+            hits.append((tier, rel, file_hits))
     if not hits:
-        print(f"未命中关键词：{' '.join(keywords)}")
+        mode = "任一" if args.any_match else "全部"
+        print(f"未命中关键词（{mode}命中）：{' '.join(keywords)}")
         return 1
-    print(f"命中 {len(hits)} 个文件 / {total} 行（关键词：{' '.join(keywords)}）\n")
+    hits.sort(key=lambda h: (h[0], str(h[1])))
+    if skipped_dataless:
+        print(f"（已跳过 {skipped_dataless} 个云端未取回的占位文件；如需纳入，请在访达中打开或 brctl download 后重试）")
+    print(f"命中 {len(hits)} 个文件 / {total} 行（关键词：{' '.join(keywords)}{'，任一命中' if args.any_match else ''}）\n")
+    slow_git: list[bool] = []
+    dates = last_commit_dates(repo, [str(rel) for _, rel, _ in hits[:20]], slow_git)
+    if slow_git:
+        print("（git 查询日期超时：知识库部分 git 对象未取回，下方日期以 - 显示）")
     shown = 0
-    for rel, file_hits in hits:
+    fallback = "-" if slow_git else "未提交"
+    for tier, rel, file_hits in hits:
         if shown >= 20:
             print(f"... 其余 {len(hits) - shown} 个文件省略，请用更精确的关键词")
             break
-        print(f"## {rel}")
+        key = str(rel)
+        date = dates.get(key) or fallback
+        print(f"## [{TIER_LABELS[tier]}|{date}] {rel}")
         for no, line in file_hits[:6]:
             text = line if len(line) <= 160 else line[:157] + "..."
             print(f"  L{no}: {text}")
@@ -211,7 +291,10 @@ def cmd_query(args: argparse.Namespace) -> int:
             print(f"  ... 另 {len(file_hits) - 6} 行，用 `hris-wiki show` 查看全文")
         print()
         shown += 1
-    print("提示：hris-wiki show <页面相对路径> 查看全文；hris-wiki ref <源文件> 反查引用。")
+    print(
+        "提示：hris-wiki show <页面相对路径> 查看全文；hris-wiki ref <源文件/目录> 反查引用。"
+        "①为现行权威口径，③为历史口径注意时效。"
+    )
     return 0
 
 
@@ -238,23 +321,37 @@ def cmd_ref(args: argparse.Namespace) -> int:
         return 1
     data = json.loads(src_index.read_text(encoding="utf-8"))
     mapping = data.get("source_to_pages") or data.get("sources") or {}
+    pages_index = data.get("pages") or {}
     target = args.source.lstrip("./")
     pages = mapping.get(target) or mapping.get(f"/{target}")
-    if not pages:
-        fuzzy = {k: v for k, v in mapping.items() if target in k}
-        if fuzzy:
-            print(f"精确路径无映射，模糊匹配 {len(fuzzy)} 个源：")
-            for k, v in list(fuzzy.items())[:10]:
-                print(f"  {k}")
-                for p in v:
-                    print(f"    -> {p}")
-            return 0
-        print(f"没有 Wiki 页面引用源文件：{target}")
-        return 1
-    print(f"引用 {target} 的页面（{len(pages)} 个）：")
-    for p in pages:
-        print(f"  {p}")
-    return 0
+    if pages:
+        print(f"引用 {target} 的页面（{len(pages)} 个）：")
+        for p in pages:
+            print(f"  {p}")
+        return 0
+    scope_hits: dict[str, list[str]] = {}
+    norm = target.rstrip("/") + "/"
+    for ppath, info in pages_index.items():
+        for scope in info.get("source_scopes") or []:
+            s = scope.rstrip("/") + "/"
+            if norm.startswith(s):
+                scope_hits.setdefault(ppath, []).append(scope)
+    if scope_hits:
+        print(f"{target} 位于以下目录来源范围内（scope 映射，{len(scope_hits)} 个页面）：")
+        for p, scopes in sorted(scope_hits.items()):
+            print(f"  {p}")
+            print(f"    scope: {scopes[0]}")
+        return 0
+    fuzzy = {k: v for k, v in mapping.items() if target in k}
+    if fuzzy:
+        print(f"精确路径无映射，模糊匹配 {len(fuzzy)} 个源：")
+        for k, v in list(fuzzy.items())[:10]:
+            print(f"  {k}")
+            for p in v:
+                print(f"    -> {p}")
+        return 0
+    print(f"没有 Wiki 页面引用源文件：{target}")
+    return 1
 
 
 def cmd_show(args: argparse.Namespace) -> int:
@@ -280,12 +377,14 @@ def cmd_repo(args: argparse.Namespace) -> int:
 def main() -> int:
     parser = argparse.ArgumentParser(
         prog="hris-wiki",
-        description="跨项目 HRIS 知识库只读查询 CLI（Repo Wiki + 知识卡 + 公共索引）。",
+        description="跨项目 HRIS 知识库只读查询 CLI（分层检索：权威知识库 + Repo Wiki + 历史归档 + 知识卡）。",
     )
     parser.add_argument("--repo", help="知识仓路径（覆盖 HRIS_WIKI_REPO / HRIS_KNOWLEDGE_REPO）")
     sub = parser.add_subparsers(dest="command", required=True)
 
-    p = sub.add_parser("query", help="全文检索 Wiki 页面与知识卡")
+    p = sub.add_parser("query", help="全文检索（默认多词 AND，--or 任一命中）")
+    p.add_argument("--or", dest="any_match", action="store_true", help="任一关键词命中即返回（旧行为）")
+    p.add_argument("--all", dest="all_layers", action="store_true", help="追加搜索④进行中文档（在途未定稿）")
     p.add_argument("keywords", nargs="+")
     p.set_defaults(func=cmd_query)
 
@@ -293,7 +392,7 @@ def main() -> int:
     p.add_argument("keywords", nargs="*")
     p.set_defaults(func=cmd_cards)
 
-    p = sub.add_parser("ref", help="反查引用某源文件的 Wiki 页面")
+    p = sub.add_parser("ref", help="反查引用某源文件/目录的 Wiki 页面")
     p.add_argument("source")
     p.set_defaults(func=cmd_ref)
 
