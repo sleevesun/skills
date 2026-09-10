@@ -1,0 +1,15 @@
+{
+  "excluded_employee_ids": [
+    {
+      "eid": "000001",
+      "name": "池宇峰",
+      "reason": "按业务明确要求排除统计"
+    }
+  ],
+  "excluded_businesses": [
+    {
+      "biz": "完美世界文化",
+      "reason": "文化业务人员不属于统计范围，直接剔除"
+    }
+  ]
+}

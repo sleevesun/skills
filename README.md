@@ -21,6 +21,7 @@ Reusable Codex skills for diagramming, PRD-to-UI annotation, social-media archiv
 | `submit-knowledge` | 中央 HRIS 知识库的合规入库、双 commit 与统一发布守门员 | Git；中央仓中的 Wiki 更新器 |
 | `update-repowiki` | 用公开 Git/文件协议增量维护 Repo Wiki 与 Knowledge Card | 中央仓中的 `scripts/update_repowiki.py` |
 | `hris-query` | HRIS 知识库只读查询：回答 HR 系统问题前先检索中央知识仓（首次邮箱+令牌认证后自动浅克隆 CNB 镜像） | Git；`@pwrd.com` 邮箱 + 管理员发放的只读令牌 |
+| `monthly-attendance-report` | 企业考勤月报全流程自动化交付：疑似花名册搜寻与确认、考勤规则增量校验与审批、北京常驻过滤与排除白名单、洪恩全量人脸接入与统一排序、单向防作弊标红与G-F>0.5均工时预警、J6/J7二维冻结、J1~J3富文本图例、全量与7大分表静态固化及无损分页PDF导出 | Python 3、openpyxl、xlrd、pypdf；无损分页 PDF 导出需 macOS Microsoft Excel |
 
 每个目录都是独立 Skill，只包含运行所需的说明、元数据、脚本和参考资源。
 
