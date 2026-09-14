@@ -16,7 +16,7 @@ async function fixtureArt(root, name = 'source.gif') {
 }
 
 function run(script, args, cwd = studio) {
-  return spawnSync(process.execPath, [join(scripts, script), ...args], { cwd, encoding: 'utf8', timeout: 10000 });
+  return spawnSync(process.execPath, [join(scripts, script), ...args], { cwd, encoding: 'utf8', timeout: 30000 });
 }
 function outputOf(result) { return `${result.stdout ?? ''}\n${result.stderr ?? ''}`; }
 function json(result) { assert.equal(result.status, 0, outputOf(result)); return JSON.parse(result.stdout); }

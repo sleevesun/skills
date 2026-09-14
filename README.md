@@ -80,7 +80,8 @@ python3 ~/.codex/skills/.system/skill-installer/scripts/install-skill-from-githu
     skills/archive-project \
     skills/submit-knowledge \
     skills/update-repowiki \
-    skills/hris-query
+    skills/hris-query \
+    skills/monthly-attendance-report
 ```
 
 安装完成后，在下一轮 Codex 对话中即可使用。目标目录已经存在时，安装器会停止而不会覆盖；请先自行备份或移走旧版本。
@@ -175,6 +176,7 @@ python3 ~/.codex/skills/.system/skill-creator/scripts/quick_validate.py skills/a
 python3 ~/.codex/skills/.system/skill-creator/scripts/quick_validate.py skills/submit-knowledge
 python3 ~/.codex/skills/.system/skill-creator/scripts/quick_validate.py skills/update-repowiki
 python3 ~/.codex/skills/.system/skill-creator/scripts/quick_validate.py skills/hris-query
+python3 ~/.codex/skills/.system/skill-creator/scripts/quick_validate.py skills/monthly-attendance-report
 node --test skills/summarize-woa-chat/tests/*.test.mjs
 python3 -m unittest discover -s skills/gpt56-sol-pro-consult/tests -v
 python3 -m unittest discover -s skills/gemini36-flash-consult/tests -v

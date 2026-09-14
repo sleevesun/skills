@@ -1,15 +1,75 @@
 #!/usr/bin/env node
+import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { assertContained, assertPlatforms, assertSafeText, contrastRatio, fail, isTextFile, mainError, parseArgs, readJson, REQUIRED_LANDMARKS, safePackagePath, walkFiles } from './package-utils.mjs';
 import { assertNoSensitiveText } from '../runtime/security.mjs';
 
 function collectStrings(value, output = []) { if (typeof value === 'string') output.push(value); else if (Array.isArray(value)) value.forEach((v) => collectStrings(v, output)); else if (value && typeof value === 'object') Object.values(value).forEach((v) => collectStrings(v, output)); return output; }
+
+function normalizeCssEscapes(css) {
+  return css.replace(/\\([0-9a-fA-F]{1,6})\s?|\\(.)/g, (_, hex, char) => {
+    if (hex) {
+      try {
+        const code = parseInt(hex, 16);
+        return code ? String.fromCodePoint(code) : '';
+      } catch {
+        return '';
+      }
+    }
+    return char || '';
+  });
+}
+
+function assertSafeCss(css, label = 'CSS') {
+  const normalized = normalizeCssEscapes(css);
+  if (/(?:https?|ftp|javascript):/i.test(normalized)) fail(`${label} contains remote or tracking protocol`);
+  const strippedComments = normalized.replace(/\/\*[\s\S]*?\*\//g, '');
+  if (/\/\//.test(strippedComments)) fail(`${label} contains protocol-relative remote resource`);
+  if (/@import\s/i.test(normalized)) fail(`${label} contains remote or tracking resource (@import)`);
+  if (/url\s*\(\s*['"]?(?:data:(?!image\/(?:png|jpeg|webp|gif);base64,)|javascript:)/i.test(normalized)) {
+    fail(`${label} contains unsafe url() target`);
+  }
+  if (/(?:-webkit-)?image-set\s*\(|src\s*\(\s*['"][^'"]+['"]\s*\)/i.test(normalized)) {
+    if (/(?:https?|ftp|javascript|\/\/)/i.test(normalized)) {
+      fail(`${label} contains remote resource in image-set/src`);
+    }
+  }
+}
+
+function assertSafeScript(value, label, { allowWorkBuddyAppPath = false } = {}) {
+  if (typeof value !== 'string') fail(`${label} is invalid`);
+  assertNoSensitiveText(value, label);
+  const dangerousPatterns = [
+    /\b(?:invoke-expression|\biex\b)\b/i,
+    /\b(?:downloadstring|downloadfile|webrequest|webclient)\b/i,
+    /\b(?:curl|wget|nc|netcat|socat)\b/i,
+    /\|\s*(?:ba|z)?sh\b/i,
+    /\|\s*(?:power)?shell\b/i,
+    /;\s*(?:rm|del|chmod|curl|wget)\b/i,
+    /&&\s*(?:invoke-expression|powershell|bash|sh)\b/i,
+    /https?:\/\/(?!127\.0\.0\.1|localhost|\$\{|www\.apache\.org)/i,
+    /\b(?:eval|new\s+Function)\s*\(/i,
+  ];
+  if (!allowWorkBuddyAppPath) {
+    dangerousPatterns.push(/(?:app\.asar|\/Applications\/WorkBuddy\.app)/i);
+  }
+  for (const pattern of dangerousPatterns) {
+    if (pattern.test(value)) {
+      fail(`${label} contains dangerous command or remote resource pattern: ${pattern.source}`);
+    }
+  }
+}
+
 function checkUnsafeText(value, label) {
   const normalizedLabel = label.replaceAll('\\', '/');
   if (normalizedLabel.startsWith('runtime/vendor/codedrobe-core/') || normalizedLabel.includes('/runtime/vendor/codedrobe-core/')) return;
-  if (normalizedLabel.startsWith('runtime/') || normalizedLabel.startsWith('targets/') || normalizedLabel.includes('/runtime/') || normalizedLabel.includes('/targets/')) {
-    assertNoSensitiveText(value, label);
+  if (normalizedLabel.startsWith('targets/') || normalizedLabel.includes('/targets/')) {
+    assertSafeScript(value, label, { allowWorkBuddyAppPath: false });
+    return;
+  }
+  if (normalizedLabel.startsWith('runtime/') || normalizedLabel.includes('/runtime/')) {
+    assertSafeScript(value, label, { allowWorkBuddyAppPath: true });
     return;
   }
   assertSafeText(value, label);
@@ -109,7 +169,7 @@ async function assertPinnedCoreRuntime(manifest, root, actual) {
   if (coreTheme.theme?.id !== manifest.themeId || coreTheme.theme?.displayName !== manifest.displayName || coreTheme.theme?.version !== manifest.version) fail('Core theme identity does not match manifest');
   const target = coreTheme.targets?.workbuddy;
   if (!target || typeof target.css !== 'string' || !target.css.trim()) fail('Core WorkBuddy target is incomplete');
-  if (/@import\s|url\(\s*["']?(?!data:)/i.test(target.css)) fail('Core CSS contains a remote resource');
+  assertSafeCss(target.css, 'Core CSS');
   for (const token of ['--cb-bg-primary', '--cb-vscode-editor-background', '--cb-text-primary', '--cb-button-dark-background', 'var(--codedrobe-art)']) {
     if (!target.css.includes(token)) fail(`Core CSS is missing ${token}`);
   }
@@ -121,6 +181,11 @@ async function assertPinnedCoreRuntime(manifest, root, actual) {
   if (!actual.includes(corePackagePath) || !actual.includes('runtime/vendor/codedrobe-core/src/index.mjs')) fail('pinned Core runtime files are missing');
   const corePackage = await readJson(join(root, corePackagePath), 'pinned Core package.json');
   if (corePackage.name !== '@codedrobe/core' || corePackage.version !== manifest.coreRuntimeVersion) fail('pinned Core package version is invalid');
+  const PINNED_CORE_HASH = '77809bd923097987684545c08394c62f97eeb81a6046494596bd07f5faa302f1';
+  const coreIndexPath = join(root, 'runtime/vendor/codedrobe-core/src/index.mjs');
+  const coreIndexContent = await readFile(coreIndexPath, 'utf8');
+  const actualHash = createHash('sha256').update(coreIndexContent).digest('hex');
+  if (actualHash !== PINNED_CORE_HASH) fail('pinned Core runtime src/index.mjs integrity verification failed');
 }
 
 async function validate(packageDir, requestedPlatform) {
@@ -173,7 +238,7 @@ async function validate(packageDir, requestedPlatform) {
   if (workbuddy.verification.contexts !== undefined && (!Array.isArray(workbuddy.verification.contexts) || workbuddy.verification.contexts.some((v) => typeof v !== 'string'))) fail('contexts schema invalid');
   const cssPath = join(root, themePackage, workbuddy.css);
   const css = await readFile(cssPath, 'utf8');
-  if (/@import\s+[^;]*url\s*\(|(?:https?:)?\/\//i.test(css) || /url\s*\(\s*['"]?(?:data:|javascript:)/i.test(css)) fail('CSS contains remote or tracking resource');
+  assertSafeCss(css, 'Theme CSS');
   const innerFiles = files.filter((item) => item.rel.startsWith(`${themePackage}/`));
   if (innerFiles.some((item) => /\.(?:js|mjs|cjs)$/i.test(item.rel))) fail('inner theme must be declarative and cannot contain executable scripts');
   const visualPath = join(root, 'analysis', 'visual-card.json');
@@ -187,7 +252,28 @@ async function validate(packageDir, requestedPlatform) {
   const ui = contrastRatio(colors.accent, colors.panel);
   assertRatio(normal, 4.5, 'normal text/background'); assertRatio(normal, 7, 'primary goal'); assertRatio(muted, 4.5, 'muted/panel'); assertRatio(ui, 3, 'UI/border/button');
   for (const text of collectStrings(visual)) checkUnsafeText(text, 'visual-card');
-  const result = { packageDir: root, themeId: manifest.themeId, targetPlatforms: platforms, fileCount: actual.length, security: { declarationOnly: true, remoteResources: false, appAsarWrites: false }, wcag: { normalTextBackground: normal, primaryGoal: normal, mutedPanel: muted, ui }, platform: requestedPlatform ?? 'any' };
+  const result = {
+    packageDir: root,
+    themeId: manifest.themeId,
+    targetPlatforms: platforms,
+    fileCount: actual.length,
+    security: {
+      declaredPolicy: manifest.security,
+      verifiedChecks: {
+        declarationOnly: true,
+        noRemoteResourcesInCss: true,
+        noAppAsarWrites: true,
+        noExecutableScriptsInTheme: true,
+        safeScriptPatternsInTargetsAndRuntime: true,
+        pinnedCoreRuntimeVerified: Boolean(manifest.coreRuntimeVersion),
+      },
+      declarationOnly: true,
+      remoteResources: false,
+      appAsarWrites: false,
+    },
+    wcag: { normalTextBackground: normal, primaryGoal: normal, mutedPanel: muted, ui },
+    platform: requestedPlatform ?? 'any',
+  };
   return result;
 }
 

@@ -61,7 +61,7 @@ Windows（cmd）下等价写法为 `set "HRIS_WIKI_REPO=C:\path\to\hris-knowledg
     python "%SKILL_DIR%\scripts\hris-wiki" query <关键词>
     ```
 
-    `%SKILL_DIR%` 由 Skill 宿主注入；手动使用时替换为本机绝对路径，例如 `C:\Users\<you>\.workbuddy\skills\hris-query`。
+    `%SKILL_DIR%` 由 Skill 宿主注入；手动使用时替换为本机实际路径（例如 `%CODEX_HOME%\skills\hris-query`，或在 WorkBuddy 环境下如 `%USERPROFILE%\.workbuddy\skills\hris-query`）。
   - 或在 PATH 目录放一个 `hris-wiki.bat`（模板见 `scripts/hris-wiki.bat`），之后即可 `hris-wiki query <关键词>`。
 
 注意：脚本首行的 `#!/usr/bin/env python3` shebang 只在 macOS / Linux / Git Bash 下生效；Windows 原生 cmd / PowerShell 会忽略它，必须通过 `python`（或 `py`）显式调用，不能双击运行。

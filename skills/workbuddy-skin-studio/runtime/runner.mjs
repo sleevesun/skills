@@ -262,7 +262,9 @@ function restoreExpression() {
 async function createCdpAdapter(endpoint) {
   let url;
   try { url = new URL(endpoint); } catch { fail('CDP URL is invalid'); }
-  if (url.protocol !== 'http:' || url.hostname !== '127.0.0.1') fail('CDP must be HTTP on 127.0.0.1');
+  if (url.protocol !== 'http:' || url.hostname !== '127.0.0.1' || (url.pathname !== '/' && url.pathname !== '')) {
+    fail('CDP must use http://127.0.0.1:<port>');
+  }
   const port = Number(url.port || 80);
   let evidence = await probeCdp({ port });
   return {

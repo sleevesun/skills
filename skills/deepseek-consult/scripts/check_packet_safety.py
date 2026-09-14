@@ -20,11 +20,11 @@ HIGH_PATTERNS = [
     ("authorization_header", re.compile(r"(?i)\bAuthorization\s*:\s*(?:Bearer|Basic)\s+[A-Za-z0-9._~+/=-]{12,}")),
     ("cookie_header", re.compile(r"(?i)\bCookie\s*:\s*[^\n]{20,}")),
     ("password_assignment", re.compile(r"(?i)\b(password|passwd|pwd|secret|token|api[_-]?key)\s*[:=]\s*['\"]?[^\s'\"]{8,}")),
+    ("id_card_cn", re.compile(r"\b\d{17}[\dXx]\b")),
 ]
 WARN_PATTERNS = [
     ("email", re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b")),
     ("phone_cn", re.compile(r"(?<!\d)1[3-9]\d{9}(?!\d)")),
-    ("id_card_cn", re.compile(r"\b\d{17}[\dXx]\b")),
     ("absolute_user_path", re.compile(r"/Users/[^\s`'\"<>]+")),
     ("private_url", re.compile(r"https?://(?:localhost|127\.0\.0\.1|10\.\d+\.\d+\.\d+|192\.168\.\d+\.\d+|172\.(?:1[6-9]|2\d|3[0-1])\.\d+\.\d+)[^\s`'\"<>]*")),
 ]
@@ -51,7 +51,8 @@ def main() -> int:
     parser.add_argument("packet", help="Packet Markdown path, or '-' for stdin")
     parser.add_argument("--max-chars", type=int, default=15000)
     parser.add_argument("--fail-on-length", action="store_true")
-    parser.add_argument("--allow-credentials", action="store_true")
+    parser.add_argument("--allow-credentials", action="store_true", help="Warn but do not fail on credential-like findings (except private keys)")
+    parser.add_argument("--allow-credentials-reason", type=str, default="", help="Audit reason for bypassing credential warnings")
     args = parser.parse_args()
     text = sys.stdin.read() if args.packet == "-" else Path(args.packet).read_text(encoding="utf-8")
     result = scan(text)
@@ -62,7 +63,13 @@ def main() -> int:
         if severity == "high":
             result["ok"] = False
     if args.allow_credentials:
-        result["ok"] = True
+        has_private_key = any(f.get("type") == "private_key" for f in result["findings"])
+        if has_private_key:
+            print("ERROR: --allow-credentials 不能豁免 private_key 类型的最高等级凭据泄露风险。", file=sys.stderr)
+        else:
+            result["ok"] = True
+            result["waived"] = True
+            result["waive_reason"] = args.allow_credentials_reason or "user-specified --allow-credentials"
     print(json.dumps(result, ensure_ascii=False, indent=2))
     return 0 if result["ok"] else 1
 

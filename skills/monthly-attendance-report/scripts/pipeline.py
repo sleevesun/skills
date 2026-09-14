@@ -5,7 +5,7 @@
   1. 接收已确认的花名册、打卡底表与规则文件；
   2. 动态自适应年月工作日日历与周末/假期列排布；
   3. 执行出勤天数、签到退均工时、人脸修正均工时算法核算；
-  4. 应用北京常驻过滤、特定人员/业务排除（000001池宇峰、完美世界文化）；
+  4. 应用北京常驻过滤、特定人员/业务排除（由 exclusions.json 配置）；
   5. 全业务线统一接入人脸数据（含洪恩）并统一按 F 列升序排序；
   6. 固化二维冻结窗格（J6/J7）、表头行内富文本（黄色/红色/灰色）、单向防作弊标红与G-F>0.5标红；
   7. 物理清空动态条件格式，导出静态交付版 Excel 及无损分页 PDF。
@@ -437,6 +437,7 @@ def calculate_attendance_engine(
 
     # 核算各项均工时指标
     metrics_map: Dict[str, Dict[str, Any]] = {}
+    missing_rule_pairs: Dict[str, int] = {}
     for eid, info in emp_meta.items():
         total_days = 0.0
         total_duration = 0.0
@@ -450,6 +451,8 @@ def calculate_attendance_engine(
             weight = 0.0
             if is_workday and has_cards:
                 pair = f"{rec['f_am']}|{rec['g_pm']}"
+                if pair not in rules:
+                    missing_rule_pairs[pair] = missing_rule_pairs.get(pair, 0) + 1
                 weight = rules.get(pair, 0.0)
 
             total_days += weight
@@ -494,6 +497,12 @@ def calculate_attendance_engine(
             "H_val": h_avg,
             "compensate": compensate_days,
         }
+
+    if missing_rule_pairs:
+        print(f"  ⚠️ 警告: 发现 {len(missing_rule_pairs)} 种未在考勤规则库收录的状态组合 (被默认按 0 权重计权):", file=sys.stderr)
+        for p, cnt in sorted(missing_rule_pairs.items(), key=lambda x: -x[1]):
+            print(f"     - '{p}': 命中 {cnt} 人次", file=sys.stderr)
+        print("     提示: 请核对这些状态组合是否应计权，并在 考勤规则.json 中补充收录以避免少计出勤天数。", file=sys.stderr)
 
     print(f"  ✓ 成功完成 {len(metrics_map)} 名员工的全月工时指标核算（共包含 {len(workdays_config)} 个工作日）")
     return metrics_map, daily_map, all_raw_eids, workdays_config, weekend_cols, max_col_total
@@ -1037,19 +1046,28 @@ def export_pdf_applescript(src_xlsx: Path, sheet_name: str, target_pdf: Path, ma
     x_str = str(temp_xlsx.resolve())
     p_str = str(temp_pdf.resolve())
 
-    applescript = f'''
-tell application "Microsoft Excel"
-    launch
-    set display alerts to false
-    set theWorkbook to open workbook workbook file name "{x_str}"
-    delay 0.8
-    save workbook as theWorkbook filename "{p_str}" file format PDF file format
-    delay 0.8
-    close theWorkbook saving no
-    delay 0.3
-end tell
+    applescript = '''
+on run argv
+    set xPath to item 1 of argv
+    set pPath to item 2 of argv
+    tell application "Microsoft Excel"
+        launch
+        set display alerts to false
+        set theWorkbook to open workbook workbook file name xPath
+        delay 0.8
+        save workbook as theWorkbook filename pPath file format PDF file format
+        delay 0.8
+        close theWorkbook saving no
+        delay 0.3
+    end tell
+end run
 '''
-    res = subprocess.run(["osascript"], input=applescript, capture_output=True, text=True, timeout=120)
+    res = subprocess.run(
+        ["osascript", "-e", applescript, "--", x_str, p_str],
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
     if temp_xlsx.exists():
         temp_xlsx.unlink()
 

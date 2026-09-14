@@ -125,21 +125,32 @@ def ensure_auth() -> dict:
     return auth
 
 
-def authed_remote(auth: dict) -> str:
-    return f"https://{auth['username']}:{auth['token']}@cnb.cool/Chordsun/HRIS.git"
+def git_auth_header(auth: dict) -> str:
+    import base64
+    user_token = f"{auth['username']}:{auth['token']}".encode("utf-8")
+    return "Authorization: Basic " + base64.b64encode(user_token).decode("ascii")
+
+
+def sanitize_git_err(err_text: str) -> str:
+    if not err_text:
+        return ""
+    return re.sub(r"://[^@\s]+@", "://***@", err_text)
 
 
 def ensure_mirror() -> Path:
     dst = mirror_dir()
     auth = ensure_auth()
-    remote_url = authed_remote(auth)
+    header = git_auth_header(auth)
+    git_cfg_args = ["-c", f"http.extraHeader={header}"]
+
     if (dst / ".git").is_dir():
+        # 确保 origin 是纯净 URL，去除可能残留的历史明文 token
         subprocess.run(
-            ["git", "-C", str(dst), "remote", "set-url", "origin", remote_url],
+            ["git", "-C", str(dst), "remote", "set-url", "origin", DEFAULT_REMOTE],
             capture_output=True,
         )
         pull = subprocess.run(
-            ["git", "-C", str(dst), "pull", "--ff-only", "--quiet"],
+            ["git"] + git_cfg_args + ["-C", str(dst), "pull", "--ff-only", "--quiet"],
             capture_output=True,
             text=True,
         )
@@ -148,10 +159,17 @@ def ensure_mirror() -> Path:
         return dst
     dst.parent.mkdir(parents=True, exist_ok=True)
     print(f"首次使用：浅克隆 {DEFAULT_REMOTE} -> {dst} ...", file=sys.stderr)
-    clone = subprocess.run(["git", "clone", "--depth", "1", remote_url, str(dst)])
+    clone = subprocess.run(
+        ["git"] + git_cfg_args + ["clone", "--depth", "1", DEFAULT_REMOTE, str(dst)],
+        capture_output=True,
+        text=True,
+    )
     if clone.returncode != 0:
+        safe_err = sanitize_git_err(clone.stderr.strip())
         print(
-            "ERROR: 自动克隆失败。请确认令牌有效且具有读取权限；"
+            "ERROR: 自动克隆失败。"
+            + (f" 详情: {safe_err}" if safe_err else "")
+            + " 请确认令牌有效且具有读取权限；"
             f"令牌无效或已过期时{ADMIN_HINT}；也可手动 clone 后设置 HRIS_WIKI_REPO。",
             file=sys.stderr,
         )
@@ -322,7 +340,7 @@ def cmd_ref(args: argparse.Namespace) -> int:
     data = json.loads(src_index.read_text(encoding="utf-8"))
     mapping = data.get("source_to_pages") or data.get("sources") or {}
     pages_index = data.get("pages") or {}
-    target = args.source.lstrip("./")
+    target = re.sub(r'^\./+', '', args.source)
     pages = mapping.get(target) or mapping.get(f"/{target}")
     if pages:
         print(f"引用 {target} 的页面（{len(pages)} 个）：")

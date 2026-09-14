@@ -156,21 +156,48 @@ function probeModule(nodeModules) {
   }
 }
 
+const ALLOWED_INTEGRITY_ALGORITHMS = new Set(["sha512", "sha384", "sha256"]);
+const MAX_DOWNLOAD_BYTES = 50 * 1024 * 1024; // 50MB
+const DOWNLOAD_TIMEOUT_MS = 60 * 1000; // 60s
+
 async function fetchJson(url) {
-  const response = await fetch(url, { headers: { "user-agent": "summarize-woa-chat-skill" } });
-  if (!response.ok) throw new WoaChatError("BOOTSTRAP_DOWNLOAD_FAILED", `请求失败 ${response.status}：${url}`);
-  return response.json();
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), DOWNLOAD_TIMEOUT_MS);
+  try {
+    const response = await fetch(url, { signal: controller.signal, headers: { "user-agent": "summarize-woa-chat-skill" } });
+    if (!response.ok) throw new WoaChatError("BOOTSTRAP_DOWNLOAD_FAILED", `请求失败 ${response.status}：${url}`);
+    return response.json();
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 async function download(url) {
-  const response = await fetch(url, { redirect: "follow", headers: { "user-agent": "summarize-woa-chat-skill" } });
-  if (!response.ok) throw new WoaChatError("BOOTSTRAP_DOWNLOAD_FAILED", `下载失败 ${response.status}：${url}`);
-  return Buffer.from(await response.arrayBuffer());
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), DOWNLOAD_TIMEOUT_MS);
+  try {
+    const response = await fetch(url, { signal: controller.signal, redirect: "follow", headers: { "user-agent": "summarize-woa-chat-skill" } });
+    if (!response.ok) throw new WoaChatError("BOOTSTRAP_DOWNLOAD_FAILED", `下载失败 ${response.status}：${url}`);
+    const contentLength = Number(response.headers.get("content-length"));
+    if (contentLength && contentLength > MAX_DOWNLOAD_BYTES) {
+      throw new WoaChatError("BOOTSTRAP_DOWNLOAD_FAILED", `下载内容过大 (${contentLength} > ${MAX_DOWNLOAD_BYTES} bytes): ${url}`);
+    }
+    const buf = Buffer.from(await response.arrayBuffer());
+    if (buf.length > MAX_DOWNLOAD_BYTES) {
+      throw new WoaChatError("BOOTSTRAP_DOWNLOAD_FAILED", `下载字节超出安全上限: ${url}`);
+    }
+    return buf;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 function verifyIntegrity(bytes, integrity, label) {
   const [algorithm, encoded] = String(integrity).split("-", 2);
   if (!algorithm || !encoded) throw new WoaChatError("BOOTSTRAP_INTEGRITY_INVALID", `${label} 的 npm integrity 格式无效。`);
+  if (!ALLOWED_INTEGRITY_ALGORITHMS.has(algorithm.toLowerCase())) {
+    throw new WoaChatError("BOOTSTRAP_INTEGRITY_INVALID", `${label} 的 integrity 算法 ${algorithm} 不在受信任列表中。`);
+  }
   const actual = crypto.createHash(algorithm).update(bytes).digest("base64");
   if (actual !== encoded) throw new WoaChatError("BOOTSTRAP_INTEGRITY_FAILED", `${label} 的完整性校验失败。`);
 }

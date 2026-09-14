@@ -287,6 +287,21 @@ try {
   if (!new Set(['.png', '.jpg', '.jpeg', '.webp', '.gif']).has(artExtension)) fail('art must be png, jpg, jpeg, webp, or gif');
   const output = resolve(args.output ?? `${id}.wbtheme`);
   if (output === resolve('/') || output.includes(`${join('Contents', 'Resources', 'app.asar')}`)) fail('unsafe output path');
+  if (!output.endsWith('.wbtheme') && !output.endsWith('.wbtheme/')) {
+    fail('output path must end with .wbtheme');
+  }
+  try {
+    const outStat = await lstat(output);
+    if (outStat.isDirectory()) {
+      // 如果目标目录已存在，检查是否是合法的此前生成的 workbuddy 主题目录或空目录，避免误删用户其他文件夹
+      const existingEntries = await readdir(output);
+      if (existingEntries.length > 0 && !existingEntries.includes('manifest.json')) {
+        fail(`output directory ${output} already exists and does not appear to be a workbuddy theme package; refusing to delete`);
+      }
+    }
+  } catch (err) {
+    if (err.code !== 'ENOENT') throw err;
+  }
   await rm(output, { recursive: true, force: true });
   const inner = join(output, 'theme.codedrobe-theme');
   await mkdir(join(inner, 'assets'), { recursive: true });
