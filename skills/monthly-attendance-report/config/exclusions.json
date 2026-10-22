@@ -1,14 +1,19 @@
 {
   "excluded_employee_ids": [
     {
-      "eid": "EXAMPLE_001",
-      "name": "示例排除人员",
-      "reason": "按业务明确要求排除统计"
+      "eid": "000001",
+      "name": "池宇峰",
+      "reason": "按业务明确要求排除统计(高管)"
+    },
+    {
+      "eid": "601102",
+      "name": "陈阳",
+      "reason": "完美世界文化业务排除"
     }
   ],
   "excluded_businesses": [
     {
-      "biz": "示例排除业务线",
+      "biz": "完美世界文化",
       "reason": "特定业务人员不属于统计范围，直接剔除"
     }
   ]
