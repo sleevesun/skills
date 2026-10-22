@@ -1,35 +1,35 @@
 #!/usr/bin/env python3
 """
-企业考勤月报全流程自动化交付引擎 (pipeline.py)
-标准交付能力：
-  1. 动态表头自适应匹配花名册（免疫字段增减、移动或列偏移）；
-  2. 智能工作日日历与周末/假期列自动折叠排布；
-  3. 出勤天数、打卡均工时、人脸修正均工时等核心指标核算；
-  4. 北京常驻过滤、特殊高管/业务排除（exclusions.json 可配）；
-  5. 组织层级智能拼接：游戏工作室特例（三级到五级）、1.1级同业务（二级到四级）、通用规则及相邻同名去重；
-  6. 视觉与排版体系（7 行一组）：
-     - A 类（签退）、B 类（人脸）、C 类（因公外出）跨午夜次日打卡统一追加 (+1)；
-     - C 类（因公外出）常规纯黑文字；
-     - D 类（考勤状态）：纯净白底、微文本标签 [出差]、全天/半天统一加【】强调；
-     - 60分钟单向防作弊红字与均工时 G-F>0.5 标红预警；
-     - 经过 Gate 3 确认的非补签假单系统异常自动标黄（黄底红字）；
-     - 二维冻结窗格（全量 J6，分表 J7）、表头 J1~J3 行内富文本图例；
-  7. 纯静态交付，彻底清空 Excel 动态条件格式；
-  8. 打印级无损 PDF 导出（7 行原子块防断页，全量 14 页自适应、重点关注 1 页）。
+2026年09月 考勤月报端到端全自动交付脚本
+功能特性:
+  1. 动态表头自适应匹配花名册 (免疫字段增减或列偏移)
+  2. 接入最新考勤规则库 (包含5种新状态组合)
+  3. 人员精准归属与过滤:
+     - 5位花名册外人员按业务明确组织归入对应分表 (考勤类型留空)
+     - 000001 (池宇峰) 与 601102 (陈阳, 完美世界文化) 确认排除
+     - 110641 (白雪) 重点关注名单保留坑位且数据留空
+     - 非北京常驻人员严格剔除
+     - 洪恩业务线按方案B全面接入人脸与F列核算，全员按F列升序排序
+  4. 2026年9月工作日日历智能适配 (22个工作日，4个周末/假期列，总列数至AI列)
+  5. 视觉固化:
+     - 单向60分钟防作弊标红与跨午夜归一化
+     - G - F > 0.5 均工时偏差标红
+     - J1~J3富文本行内图例、J6/J7二维冻结窗格
+     - 彻底清除动态条件格式，纯静态交付
+  6. 产出交付件:
+     - 单一 Excel: 考勤数据+排名-2026年0901-0930- v1.0.xlsx (无“最新”后缀)
+     - 全量与重点关注双 PDF (无损打印排版)
 """
 
-from __future__ import annotations
-
-import argparse
 import contextlib
-from copy import copy
-from datetime import date, datetime, time
 import json
 import math
-from pathlib import Path
 import shutil
 import subprocess
 import sys
+from copy import copy
+from datetime import date, datetime, time
+from pathlib import Path
 from typing import Any
 
 import openpyxl
@@ -48,8 +48,20 @@ except ImportError:
     xlrd = None
 
 # ============================================================
-# 常量定义
+# 常量与路径配置
 # ============================================================
+BASE_DIR = Path("/Users/xianer/Downloads/考勤月报/Data")
+MONTH_DIR = BASE_DIR / "202609"
+
+SRC_DATA_FILE = MONTH_DIR / "考勤数据0901至0930(含合并卡数据).xlsx"
+PRIMARY_ROSTER_FILE = BASE_DIR / "〔中台〕员工花名册-OD_zhaohui118278_2026-09-03_10-11-06.xls"
+SUPPLEMENT_ROSTER_FILE = BASE_DIR / "员工花名册.xlsx"
+RULES_FILE = BASE_DIR / "考勤规则.json"
+TEMPLATE_FILE = BASE_DIR.parent / "Attendance Analysis template-March.xlsm"
+if not TEMPLATE_FILE.exists():
+    TEMPLATE_FILE = Path("/Users/xianer/.agents/skills/_disabled/monthly-attendance-report/template/attendance_template.xlsm")
+OUTPUT_DIR = MONTH_DIR / "交付"
+
 FOCUS_LIST = [
     ("000477", "王巍巍", "洪恩"),
     ("110641", "白雪", "游戏业务"),
@@ -74,7 +86,58 @@ TARGET_SHEET_ORDER = [
     "全量",
 ]
 
-# 字体常量
+# 特殊排除人员名单与业务
+# 130700 (见川)、130753 (Happy Liu) 确认归属游戏业务(定潮工作室)，本次按业务指示剔除，下次有数据再纳入游戏业务生成
+EXCLUDED_EIDS = {"000001", "601102", "130700", "130753"}
+EXCLUDED_BIZS = {"完美世界文化"}
+
+# 手工确认补充的花名册外人员 (130700、130753 本次剔除)
+MANUAL_EMPLOYEES = {
+    "130734": {
+        "eid": "130734",
+        "name": "唐思遥",
+        "biz": "游戏业务",
+        "target_area": "游戏业务",
+        "dept": "黑羽工作室>KIZUNA",
+        "office": "北京",
+        "is_bj": True,
+        "att_type": "",
+    },
+    "606765": {
+        "eid": "606765",
+        "name": "宋阳",
+        "biz": "虚拟世界",
+        "target_area": "虚拟世界",
+        "dept": "业务管理部",
+        "office": "北京",
+        "is_bj": True,
+        "att_type": "",
+    },
+    "804257": {
+        "eid": "804257",
+        "name": "秦健",
+        "biz": "洪恩",
+        "target_area": "洪恩",
+        "dept": "国内营销中心>商业化程序中台",
+        "office": "北京",
+        "is_bj": True,
+        "att_type": "",
+    },
+}
+
+# 用户明确确认：视同补签进行“标黄”的非补签异常打卡名单 (工号, 日期, 签到/签退端)
+# 包括张月阳(9/9)、马曼曼(9/24)、徐研芳(9/20)、张雨姗(9/23)、陈永波(9/1)
+CONFIRMED_YELLOW_HIGHLIGHTS: set[tuple[str, str, str]] = {
+    ("128898", "2026-09-09", "in"),   # 张月阳 9/9 签到 12:00
+    ("109476", "2026-09-24", "out"),  # 马曼曼 9/24 签退 13:00
+    ("117707", "2026-09-20", "out"),  # 徐研芳 9/20 签退 14:30
+    ("800954", "2026-09-23", "out"),  # 张雨姗 9/23 签退 15:50
+    ("802356", "2026-09-01", "in"),   # 陈永波 9/1 签到 09:30
+}
+
+# ============================================================
+# 固化样式常量
+# ============================================================
 FONT_WEEKDAY = Font(name="微软雅黑", size=9.0, bold=False, color="FF000000")
 FONT_DATE = Font(name="微软雅黑", size=10.0, bold=False, color="FF000000")
 FONT_WEEKEND_HEADER = Font(name="微软雅黑", size=10.0, bold=False, color="FF000000")
@@ -85,13 +148,17 @@ FONT_IN_OUT_GRAY = Font(name="微软雅黑", size=9.0, bold=False, color="FF8080
 FONT_FACE = Font(name="微软雅黑", size=9.0, bold=False, color="FF0070C0")
 FONT_OUTING = Font(name="微软雅黑", size=9.0, bold=False, color="FF000000")
 
-# 考勤状态 (D 行方案三: 白底微文本标签)
-FONT_STATUS_TRAVEL = Font(name="微软雅黑", size=9.0, bold=True, color="FF004085")
-FONT_STATUS_LEAVE = Font(name="微软雅黑", size=9.0, bold=True, color="FF2B2D42")
-
 FILL_WEEKEND_LIGHT = PatternFill(fill_type="solid", fgColor="FFF2F2F2")
 FILL_HIGHLIGHT_YELLOW = PatternFill(fill_type="solid", fgColor="FFFFF3CA")
 FILL_NONE = PatternFill()
+
+# 方案三: 纯净白底无填充，微文本标签明度与字重分层 (方案 A)
+# 出差: [出差] 深海青黑体字
+FONT_STATUS_TRAVEL = Font(name="微软雅黑", size=9.0, bold=True, color="FF004085")
+# 全天请假: 【全天请假】 深炭黑加粗体字 (醒目扎实，一眼抓住整天休假)
+FONT_STATUS_LEAVE_FULL = Font(name="微软雅黑", size=9.0, bold=True, color="FF1A202C")
+# 半天请假: 【上午请假】/【下午请假】 雅致中灰常规字重 (优雅轻描，比全天明显变浅约40%)
+FONT_STATUS_LEAVE_HALF = Font(name="微软雅黑", size=9.0, bold=False, color="FF718096")
 
 BORDER_MEDIUM_BLACK = Side(style="medium", color="000000")
 BORDER_THIN_GRAY = Side(style="thin", color="D9D9D9")
@@ -121,17 +188,14 @@ def apply_rich_text_legends(target_ws: Any) -> None:
     ])
 
 
-def set_cell(target_ws: Any, row: int, col: int, val: Any) -> None:
-    cell_obj = target_ws.cell(row, col)
-    setattr(cell_obj, "value", val)
-
-
+# ============================================================
+# 工具函数
+# ============================================================
 def norm_emp_id(value: Any) -> str:
     if value is None:
         return ""
     text = str(value).strip()
-    if text.endswith(".0"):
-        text = text[:-2]
+    text = text.removesuffix(".0")
     if text.isdigit():
         try:
             return str(int(text)).zfill(6)
@@ -227,12 +291,12 @@ def determine_in_out_font(card_str: str, face_str: str, is_out: bool = False) ->
     t_c = parse_time_to_hours(card_str)
     t_f = parse_time_to_hours(face_str)
     if t_c is not None and t_f is not None:
-        threshold_h = 60.0 / 60.0
+        THRESHOLD_H = 60.0 / 60.0
         if not is_out:
-            if (t_c + threshold_h) < t_f:
+            if (t_c + THRESHOLD_H) < t_f:
                 return FONT_IN_OUT_RED
         else:
-            if (t_c - threshold_h) > t_f:
+            if (t_c - THRESHOLD_H) > t_f:
                 return FONT_IN_OUT_RED
 
     return FONT_IN_OUT_BLACK
@@ -271,8 +335,13 @@ def format_time_str(val: Any, is_out: bool = False) -> str:
     return s if s else "--:--"
 
 
+def set_cell(target_ws: Any, row: int, col: int, val: Any) -> None:
+    cell_obj = target_ws.cell(row, col)
+    cell_obj.value = val
+
+
 def get_attendance_status(f_am: Any, g_pm: Any) -> str:
-    """根据底表 F 列(上午状态)与 G 列(下午状态)计算 D 考勤状态 (微文本标签):
+    """根据底表 F 列(上午状态)与 G 列(下午状态)计算 D 考勤状态 (方案三: 微文本标签):
     1. 半天或全天出差，或同时出差和请假 -> 统一显示 '[出差]'
     2. 上下午均请假(含调休) -> '【全天请假】'
     3. 仅上午请假(含调休) -> '【上午请假】'
@@ -301,184 +370,145 @@ def get_attendance_status(f_am: Any, g_pm: Any) -> str:
 
 
 # ============================================================
-# 1. 动态表头读取花名册
+# 1. 动态表头读取花名册 (方案2 优选)
 # ============================================================
-def load_roster(
-    roster_path: Path,
-    manual_overrides: dict[str, dict[str, Any]] | None = None
-) -> dict[str, dict[str, Any]]:
-    print(f"\n📋 [阶段 1/6] 加载员工花名册: {roster_path.name}")
+def load_roster_dynamic(primary_path: Path, supplement_path: Path | None = None) -> dict[str, dict[str, Any]]:
+    print(f"\n📋 [阶段 1/6] 动态解析加载花名册: {primary_path.name}")
     roster_map: dict[str, dict[str, Any]] = {}
 
-    suffix = roster_path.suffix.lower()
-    if suffix == ".xls":
-        if xlrd is None:
-            raise RuntimeError("需要 xlrd 库以读取 .xls 文件，请安装: pip install xlrd")
-        b = xlrd.open_workbook(str(roster_path))
-        sh_name = "数据" if "数据" in b.sheet_names() else b.sheet_names()[0]
-        sh = b.sheet_by_name(sh_name)
+    if xlrd is None:
+        raise RuntimeError("需要 xlrd 库以读取 .xls 文件")
+    if not primary_path.exists():
+        raise FileNotFoundError(f"主花名册未找到: {primary_path}")
 
-        header_row_idx = None
-        headers: list[str] = []
-        for r in range(min(30, sh.nrows)):
-            row_vals = [str(x).strip() for x in sh.row_values(r)]
-            if "员工ID" in row_vals and "办公地点" in row_vals:
-                header_row_idx = r
-                headers = row_vals
-                break
+    b = xlrd.open_workbook(str(primary_path))
+    sh_name = "数据" if "数据" in b.sheet_names() else b.sheet_names()[0]
+    sh = b.sheet_by_name(sh_name)
 
-        if header_row_idx is None:
-            raise ValueError("无法在主花名册中定位包含'员工ID'和'办公地点'的表头行")
+    # 动态扫描定位表头所在行及对应列
+    header_row_idx = None
+    headers: list[str] = []
+    for r in range(min(30, sh.nrows)):
+        row_vals = [str(x).strip() for x in sh.row_values(r)]
+        if "员工ID" in row_vals and "办公地点" in row_vals:
+            header_row_idx = r
+            headers = row_vals
+            break
 
-        def find_col(name: str, fallback_idx: int) -> int:
-            for i, h in enumerate(headers):
-                if name in h:
-                    return i
-            return fallback_idx
+    if header_row_idx is None:
+        raise ValueError("无法在主花名册中定位包含'员工ID'和'办公地点'的表头行")
 
-        c_eid = find_col("员工ID", 7)
-        c_name = find_col("员工姓名", 8)
-        c_biz = find_col("业务类别", 0)
-        c_d1 = find_col("1.1级部门", 1)
-        c_d2 = find_col("二级部门", 2)
-        c_d3 = find_col("三级部门", 3)
-        c_d4 = find_col("四级部门", 4)
-        c_d5 = find_col("五级部门", 5)
-        c_off = find_col("办公地点", 31)
-        c_att = find_col("考勤类型", 30)
+    print(f"  ✓ 成功定位花名册表头位于第 {header_row_idx + 1} 行")
 
-        def get_cell_str(row: Any, idx: int) -> str:
-            if idx < len(row):
-                v = row[idx]
-                if v is not None:
-                    s = str(v).strip()
-                    return "" if s in ("", "-", "None") else s
-            return ""
+    def find_col(name: str, fallback_idx: int) -> int:
+        for i, h in enumerate(headers):
+            if name in h:
+                return i
+        return fallback_idx
 
-        for r in range(header_row_idx + 1, sh.nrows):
-            vals = sh.row_values(r)
-            eid = norm_emp_id(vals[c_eid])
-            if not eid:
-                continue
+    c_eid = find_col("员工ID", 7)
+    c_name = find_col("员工姓名", 8)
+    c_biz = find_col("业务类别", 0)
+    c_d1 = find_col("1.1级部门", 1)
+    c_d2 = find_col("二级部门", 2)
+    c_d3 = find_col("三级部门", 3)
+    c_d4 = find_col("四级部门", 4)
+    c_d5 = find_col("五级部门", 5)
+    c_off = find_col("办公地点", 31)
+    c_att = find_col("考勤类型", 30)
 
-            biz = get_cell_str(vals, c_biz)
-            d1 = get_cell_str(vals, c_d1)
-            d2 = get_cell_str(vals, c_d2)
-            d3 = get_cell_str(vals, c_d3)
-            d4 = get_cell_str(vals, c_d4)
-            d5 = get_cell_str(vals, c_d5)
+    def get_cell_str(row: Any, idx: int) -> str:
+        if idx < len(row):
+            v = row[idx]
+            if v is not None:
+                s = str(v).strip()
+                return "" if s in ("", "-", "None") else s
+        return ""
 
-            # 部门拼接业务规则：
-            # 1. 游戏工作室群/新业务事业群特例: 三级到五级
-            # 2. 1.1级与业务同名: 二级到四级
-            # 3. 通用: 1.1级到四级
-            # 4. 相邻同名去重与过滤空值
-            if biz == "游戏业务" and d2 in ["游戏工作室群", "新业务事业群"]:
-                raw_chain = [d3, d4, d5]
-            elif d1 == biz:
-                raw_chain = [d2, d3, d4]
-            else:
-                raw_chain = [d1, d2, d3, d4]
+    for r in range(header_row_idx + 1, sh.nrows):
+        vals = sh.row_values(r)
+        eid = norm_emp_id(vals[c_eid])
+        if not eid:
+            continue
 
-            dedup_chain = []
-            for p in raw_chain:
-                if p and (not dedup_chain or dedup_chain[-1] != p):
-                    dedup_chain.append(p)
-            dept = ">".join(dedup_chain)
+        biz = get_cell_str(vals, c_biz)
+        d1 = get_cell_str(vals, c_d1)
+        d2 = get_cell_str(vals, c_d2)
+        d3 = get_cell_str(vals, c_d3)
+        d4 = get_cell_str(vals, c_d4)
+        d5 = get_cell_str(vals, c_d5)
 
-            off = get_cell_str(vals, c_off)
-            name = get_cell_str(vals, c_name)
-            att_type = get_cell_str(vals, c_att)
+        # 部门拼接业务规则：
+        # 1. 如果是游戏业务下且二级部门是游戏工作室群或者新业务事业群，则从三级部门拼接到五级部门
+        # 2. 否则，如果1.1级部门和业务类别是相同的，则从二级部门拼接到四级部门
+        # 3. 否则，从1.1级部门一直拼接到四级部门
+        if biz == "游戏业务" and d2 in ["游戏工作室群", "新业务事业群"]:
+            raw_chain = [d3, d4, d5]
+        elif d1 == biz:
+            raw_chain = [d2, d3, d4]
+        else:
+            raw_chain = [d1, d2, d3, d4]
 
-            roster_map[eid] = {
-                "eid": eid,
-                "name": name,
-                "biz": biz,
-                "dept": dept,
-                "office": off,
-                "att_type": att_type,
-                "is_bj": is_bj_office(off),
-            }
-    else:
-        wb = openpyxl.load_workbook(str(roster_path), data_only=True)
-        sh = wb["数据"] if "数据" in wb.sheetnames else wb.active
-        if sh is not None:
-            header_row = 1
-            headers: list[str] = []
-            for r in range(1, min(15, sh.max_row + 1)):
-                row_vals = [str(sh.cell(r, c).value or "").strip() for c in range(1, sh.max_column + 1)]
-                if "员工ID" in row_vals and "办公地点" in row_vals:
-                    header_row = r
-                    headers = row_vals
-                    break
+        # 相邻同名去重与过滤空值
+        dedup_chain = []
+        for p in raw_chain:
+            if p and (not dedup_chain or dedup_chain[-1] != p):
+                dedup_chain.append(p)
+        dept = ">".join(dedup_chain)
 
-            def find_col_xlsx(name: str, fallback_idx: int) -> int:
-                for i, h in enumerate(headers):
-                    if name in h:
-                        return i + 1
-                return fallback_idx
+        off = get_cell_str(vals, c_off)
+        name = get_cell_str(vals, c_name)
+        att_type = get_cell_str(vals, c_att)
 
-            c_eid = find_col_xlsx("员工ID", 8)
-            c_name = find_col_xlsx("员工姓名", 9)
-            c_biz = find_col_xlsx("业务类别", 1)
-            c_d1 = find_col_xlsx("1.1级部门", 2)
-            c_d2 = find_col_xlsx("二级部门", 3)
-            c_d3 = find_col_xlsx("三级部门", 4)
-            c_d4 = find_col_xlsx("四级部门", 5)
-            c_d5 = find_col_xlsx("五级部门", 6)
-            c_off = find_col_xlsx("办公地点", 32)
-            c_att = find_col_xlsx("考勤类型", 31)
+        roster_map[eid] = {
+            "eid": eid,
+            "name": name,
+            "biz": biz,
+            "dept": dept,
+            "office": off,
+            "att_type": att_type,
+            "is_bj": is_bj_office(off),
+            "source": "primary",
+        }
 
-            for r in range(header_row + 1, sh.max_row + 1):
-                eid = norm_emp_id(sh.cell(r, c_eid).value)
-                if not eid:
+    # 补充花名册 (若有)
+    if supplement_path and supplement_path.exists():
+        wb_sup = openpyxl.load_workbook(str(supplement_path), data_only=True)
+        ws_sup = wb_sup["员工花名册"] if "员工花名册" in wb_sup.sheetnames else wb_sup.active
+        if ws_sup is not None:
+            for row in ws_sup.iter_rows(min_row=5, values_only=True):
+                if not row or row[0] is None:
                     continue
-                biz = str(sh.cell(r, c_biz).value or "").strip()
-                d1 = str(sh.cell(r, c_d1).value or "").strip()
-                d2 = str(sh.cell(r, c_d2).value or "").strip()
-                d3 = str(sh.cell(r, c_d3).value or "").strip()
-                d4 = str(sh.cell(r, c_d4).value or "").strip()
-                d5 = str(sh.cell(r, c_d5).value or "").strip()
+                eid = norm_emp_id(row[0])
+                if eid and eid not in roster_map:
+                    name = str(row[1] or "").strip()
+                    biz = str(row[2] or "").strip()
+                    dept = str(row[3] or "").strip()
+                    off = str(row[4] or "").strip() if len(row) > 4 else ""
+                    att_type = str(row[5] or "").strip() if len(row) > 5 else ""
+                    roster_map[eid] = {
+                        "eid": eid,
+                        "name": name,
+                        "biz": biz,
+                        "dept": dept,
+                        "office": off,
+                        "att_type": att_type,
+                        "is_bj": is_bj_office(off),
+                        "source": "supplement",
+                    }
+        wb_sup.close()
 
-                if biz == "游戏业务" and d2 in ["游戏工作室群", "新业务事业群"]:
-                    raw_chain = [d3, d4, d5]
-                elif d1 == biz:
-                    raw_chain = [d2, d3, d4]
-                else:
-                    raw_chain = [d1, d2, d3, d4]
+    # 注入用户确认的 5 位手工归属人员
+    for eid, info in MANUAL_EMPLOYEES.items():
+        roster_map[eid] = info
+        print(f"  • 手工注入人员: {eid} {info['name']} -> {info['dept']}")
 
-                dedup_chain = []
-                for p in raw_chain:
-                    if p and (not dedup_chain or dedup_chain[-1] != p):
-                        dedup_chain.append(p)
-                dept = ">".join(dedup_chain)
-                off = str(sh.cell(r, c_off).value or "").strip()
-                name = str(sh.cell(r, c_name).value or "").strip()
-                att_type = str(sh.cell(r, c_att).value or "").strip()
-
-                roster_map[eid] = {
-                    "eid": eid,
-                    "name": name,
-                    "biz": biz,
-                    "dept": dept,
-                    "office": off,
-                    "att_type": att_type,
-                    "is_bj": is_bj_office(off),
-                }
-        wb.close()
-
-    # 注入人工确认信息
-    if manual_overrides:
-        for eid, m_info in manual_overrides.items():
-            eid_norm = norm_emp_id(eid)
-            roster_map[eid_norm] = m_info
-
-    print(f"  ✓ 成功读取花名册，有效在册员工总数: {len(roster_map)} 人")
+    print(f"  ✓ 成功加载花名册映射库，有效在册总数: {len(roster_map)} 人")
     return roster_map
 
 
 # ============================================================
-# 2. 动态日历构建与指标计算
+# 2. 考勤指标核算与日历自适应构建
 # ============================================================
 def calculate_attendance_engine(
     raw_xlsx: Path, rules_json: Path
@@ -550,7 +580,7 @@ def calculate_attendance_engine(
 
     wb_raw.close()
 
-    # 动态构建月份日历与列分布
+    # 动态构建 9 月日历布局
     dates_sorted = sorted(calendar_map.items(), key=lambda x: x[0])
     col_idx = 10
     workdays_config: list[tuple[int, date, str]] = []
@@ -576,7 +606,7 @@ def calculate_attendance_engine(
 
     max_col_total = col_idx - 1
 
-    # 核算各项均工时指标
+    # 核算出勤天数与工时指标
     metrics_map: dict[str, dict[str, Any]] = {}
     missing_rule_pairs: dict[str, int] = {}
 
@@ -648,16 +678,14 @@ def calculate_attendance_engine(
         }
 
     if missing_rule_pairs:
-        print(f"  ⚠️ 警告: 发现 {len(missing_rule_pairs)} 种未在考勤规则库收录的状态组合 (被默认按 0 权重计权):", file=sys.stderr)
-        for p, cnt in sorted(missing_rule_pairs.items(), key=lambda x: -x[1]):
-            print(f"     - '{p}': 命中 {cnt} 人次", file=sys.stderr)
+        print(f"  ⚠️ 警告: 发现 {len(missing_rule_pairs)} 种未收录的状态组合: {missing_rule_pairs}", file=sys.stderr)
 
     print(f"  ✓ 成功完成 {len(metrics_map)} 名员工的全月工时指标核算（共包含 {len(workdays_config)} 个工作日，{len(weekend_cols)} 个非工作日列）")
     return metrics_map, daily_map, all_raw_eids, workdays_config, weekend_cols, max_col_total
 
 
 # ============================================================
-# 3. 构建全量与分表工作簿 (7 行一组)
+# 3. 构建全量与分表工作簿
 # ============================================================
 def build_attendance_workbook(
     template_path: Path,
@@ -668,22 +696,8 @@ def build_attendance_workbook(
     workdays_config: list[tuple[int, date, str]],
     weekend_cols: set[int],
     max_col: int,
-    exclusions_json: Path,
-    confirmed_yellows: set[tuple[str, str, str]] | None = None,
 ) -> tuple[openpyxl.Workbook, dict[str, int]]:
-    print("\n🏗️  [阶段 3/6] 构建静态标准 Excel 工作簿 (7 行一组体系)...")
-
-    excluded_eids = set()
-    excluded_bizs = set()
-    if exclusions_json.exists():
-        with open(exclusions_json, encoding="utf-8") as f:
-            ex_data = json.load(f)
-            for item in ex_data.get("excluded_employee_ids", []):
-                excluded_eids.add(norm_emp_id(item.get("eid")))
-            for item in ex_data.get("excluded_businesses", []):
-                excluded_bizs.add(item.get("biz"))
-
-    confirmed_yellow_set = confirmed_yellows or set()
+    print("\n🏗️  [阶段 3/6] 构建静态标准 Excel 工作簿...")
 
     wb = openpyxl.load_workbook(str(template_path))
     bj_assigned: dict[str, list[dict[str, Any]]] = {a: [] for a in AREA_ORDER}
@@ -691,26 +705,11 @@ def build_attendance_workbook(
     removed_unmatched = []
     focus_id_set = {f[0] for f in FOCUS_LIST}
 
-    # 1) 重点关注固定人员
+    # 1) 重点关注固定人员分配
     for fid, fname, fbiz in FOCUS_LIST:
         fid_norm = norm_emp_id(fid)
-        if fid in metrics_map or fid_norm in metrics_map:
-            m = metrics_map.get(fid, metrics_map.get(fid_norm, {}))
-            r_info = roster_map.get(fid_norm, {})
-            dept = r_info.get("dept", "")
-            bj_assigned["重点关注"].append({
-                "eid": fid,
-                "name": fname,
-                "biz": fbiz,
-                "dept": dept,
-                "att_type": m.get("att_type") or r_info.get("att_type", ""),
-                "G_val": m.get("G_val", "-"),
-                "F_val": m.get("H_val", "-"),
-                "H_val": m.get("compensate", 0),
-                "is_empty_slot": False,
-            })
-        else:
-            # 白雪 110641 空坑位保留
+        if fid == "110641":
+            # 业务明确确认: 110641 先空着数据，保留坑位
             bj_assigned["重点关注"].append({
                 "eid": fid,
                 "name": fname,
@@ -722,24 +721,40 @@ def build_attendance_workbook(
                 "H_val": 0,
                 "is_empty_slot": True,
             })
+            continue
 
-    # 2) 其他员工分流
+        m = metrics_map.get(fid, metrics_map.get(fid_norm, {}))
+        r_info = roster_map.get(fid_norm, {})
+        dept = r_info.get("dept", "")
+        bj_assigned["重点关注"].append({
+            "eid": fid,
+            "name": fname,
+            "biz": fbiz,
+            "dept": dept,
+            "att_type": m.get("att_type") or r_info.get("att_type", ""),
+            "G_val": m.get("G_val", "-"),
+            "F_val": m.get("H_val", "-"),
+            "H_val": m.get("compensate", 0),
+            "is_empty_slot": False,
+        })
+
+    # 2) 其他员工归属与过滤
     for eid in sorted(all_raw_eids):
         eid_norm = norm_emp_id(eid)
         if eid in focus_id_set or eid_norm in focus_id_set:
             continue
-        if eid in excluded_eids or eid_norm in excluded_eids:
-            removed_non_bj.append((eid, metrics_map.get(eid, {}).get("name", ""), "特殊白名单排除"))
+        if eid in EXCLUDED_EIDS or eid_norm in EXCLUDED_EIDS:
+            removed_non_bj.append((eid, metrics_map.get(eid, {}).get("name", ""), "特殊名单排除(高管/指定)"))
             continue
 
         if eid_norm in roster_map:
             r_info = roster_map[eid_norm]
-            if r_info["is_bj"]:
-                biz = r_info["biz"]
-                if biz in excluded_bizs:
-                    removed_non_bj.append((eid, metrics_map.get(eid, {}).get("name", ""), f"{biz}(业务排除)"))
-                    continue
+            biz = r_info["biz"]
+            if biz in EXCLUDED_BIZS:
+                removed_non_bj.append((eid, metrics_map.get(eid, {}).get("name", ""), f"{biz}(业务排除)"))
+                continue
 
+            if r_info["is_bj"]:
                 target_area = r_info.get("target_area")
                 if not target_area:
                     if biz in AREA_ORDER:
@@ -907,7 +922,7 @@ def build_attendance_workbook(
 
     apply_rich_text_legends(ws_full)
 
-    # 写入全量表数据 (7 行一组)
+    # 写入全量表数据
     cursor = 6
     section_ranges: dict[str, tuple[int, int]] = {}
 
@@ -992,9 +1007,11 @@ def build_attendance_workbook(
             # G - F > 0.5 标红预警
             is_g_red = False
             if f_disp != "-" and g_disp != "-":
-                with contextlib.suppress(ValueError, TypeError):
+                try:
                     if (float(g_disp) - float(f_disp)) > 0.5:
                         is_g_red = True
+                except (ValueError, TypeError):
+                    pass
 
             g_font = FONT_IN_OUT_RED if is_g_red else FONT_IN_OUT_BLACK
             for r_off in range(7):
@@ -1078,16 +1095,18 @@ def build_attendance_workbook(
                 c_d.fill = FILL_NONE
                 if status_text == "[出差]":
                     c_d.font = FONT_STATUS_TRAVEL
-                elif status_text in ["【全天请假】", "【上午请假】", "【下午请假】"]:
-                    c_d.font = FONT_STATUS_LEAVE
+                elif status_text == "【全天请假】":
+                    c_d.font = FONT_STATUS_LEAVE_FULL
+                elif status_text in ["【上午请假】", "【下午请假】"]:
+                    c_d.font = FONT_STATUS_LEAVE_HALF
                 else:
                     c_d.font = FONT_IN_OUT_BLACK
 
                 fam = str(d_rec.get("f_am", "")).strip()
                 gpm = str(d_rec.get("g_pm", "")).strip()
-                if fam == "已考勤补签" or (eid, dt_str, "in") in confirmed_yellow_set:
+                if fam == "已考勤补签" or (eid, dt_str, "in") in CONFIRMED_YELLOW_HIGHLIGHTS:
                     c_in.fill = FILL_HIGHLIGHT_YELLOW
-                if gpm == "已考勤补签" or (eid, dt_str, "out") in confirmed_yellow_set:
+                if gpm == "已考勤补签" or (eid, dt_str, "out") in CONFIRMED_YELLOW_HIGHLIGHTS:
                     c_out.fill = FILL_HIGHLIGHT_YELLOW
 
             for c in range(1, 9):
@@ -1238,7 +1257,7 @@ def build_attendance_workbook(
 
 
 # ============================================================
-# 4. 原生高质量无损 PDF 导出
+# 4. 安全分页与高质量 PDF 导出
 # ============================================================
 def export_pdf_applescript(src_xlsx: Path, sheet_name: str, target_pdf: Path, max_col: int) -> None:
     wb = openpyxl.load_workbook(str(src_xlsx), rich_text=True)
@@ -1280,8 +1299,8 @@ def export_pdf_applescript(src_xlsx: Path, sheet_name: str, target_pdf: Path, ma
         ws.row_breaks.append(Break(id=next_start - 1))
         current_start = next_start
 
-    temp_xlsx = src_xlsx.parent / "_pdf_temp_in.xlsx"
-    temp_pdf = src_xlsx.parent / "_pdf_temp_out.pdf"
+    temp_xlsx = src_xlsx.parent / "_pdf_temp_input.xlsx"
+    temp_pdf = src_xlsx.parent / "_pdf_temp_output.pdf"
 
     for p in [temp_xlsx, temp_pdf]:
         if p.exists():
@@ -1329,30 +1348,24 @@ end tell
 # ============================================================
 # 主执行入口
 # ============================================================
-def run_pipeline(
-    raw_path: Path,
-    roster_path: Path,
-    rules_path: Path,
-    exclusions_path: Path,
-    template_path: Path,
-    out_dir: Path,
-    export_pdf: bool = True,
-    confirmed_yellows: set[tuple[str, str, str]] | None = None,
-    manual_overrides: dict[str, dict[str, Any]] | None = None,
-) -> dict[str, Any]:
-    out_dir.mkdir(parents=True, exist_ok=True)
+def main():
+    print("=" * 70)
+    print("【2026年09月 考勤月报端到端全自动交付】启动")
+    print("=" * 70)
 
-    # 1. 读取花名册
-    roster_map = load_roster(roster_path, manual_overrides=manual_overrides)
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
-    # 2. 计算工时与日历
+    # 1. 读取花名册 (动态表头自适应)
+    roster_map = load_roster_dynamic(PRIMARY_ROSTER_FILE, SUPPLEMENT_ROSTER_FILE)
+
+    # 2. 原生考勤核算
     metrics_map, daily_map, all_raw_eids, workdays_config, weekend_cols, max_col = calculate_attendance_engine(
-        raw_path, rules_path
+        SRC_DATA_FILE, RULES_FILE
     )
 
-    # 3. 构建工作簿
+    # 3. 构建 Excel
     wb, counts = build_attendance_workbook(
-        template_path,
+        TEMPLATE_FILE,
         roster_map,
         metrics_map,
         daily_map,
@@ -1360,58 +1373,32 @@ def run_pipeline(
         workdays_config,
         weekend_cols,
         max_col,
-        exclusions_path,
-        confirmed_yellows=confirmed_yellows,
     )
 
-    # 4. 导出 Excel
-    month_match = Path(raw_path).stem
-    out_excel = out_dir / f"考勤数据+排名-{month_match}- v1.0.xlsx"
+    # 4. 保存唯一 Excel 文件 (不生成“最新”后缀)
+    excel_filename = "考勤数据+排名-2026年0901-0930- v1.0.xlsx"
+    out_excel = OUTPUT_DIR / excel_filename
     wb.save(out_excel)
     wb.close()
-    print(f"\n💾 [阶段 4/6] Excel 已生成: {out_excel.name}")
+    print(f"\n💾 [阶段 4/6] 交付 Excel 已生成: {out_excel.name} ({out_excel.stat().st_size / 1024:.1f} KB)")
 
-    # 5. 导出 PDF
-    pdf_full = out_dir / f"全量_考勤数据+排名-{month_match}- v1.0.pdf"
-    pdf_focus = out_dir / f"重点关注_考勤数据+排名-{month_match}- v1.0.pdf"
+    # 5. 导出双 PDF
+    pdf_full = OUTPUT_DIR / "全量_考勤数据+排名-2026年0901-0930- v1.0.pdf"
+    pdf_focus = OUTPUT_DIR / "重点关注_考勤数据+排名-2026年0901-0930- v1.0.pdf"
 
-    if export_pdf and sys.platform == "darwin":
+    if sys.platform == "darwin":
         print("\n📄 [阶段 5/6] 导出全量与重点关注 PDF...")
         export_pdf_applescript(out_excel, "全量", pdf_full, max_col)
         export_pdf_applescript(out_excel, "重点关注", pdf_focus, max_col)
 
-    return {
-        "status": "success",
-        "counts": counts,
-        "total_employees": counts.get("全量", sum(counts.values())),
-        "excel_path": str(out_excel),
-        "pdf_full_path": str(pdf_full) if pdf_full.exists() else None,
-        "pdf_focus_path": str(pdf_focus) if pdf_focus.exists() else None,
-    }
-
-
-def main():
-    parser = argparse.ArgumentParser(description="企业考勤月报全流程自动化交付引擎")
-    parser.add_argument("--raw", required=True, help="原始考勤打卡底表 (.xlsx)")
-    parser.add_argument("--roster", required=True, help="员工花名册 (.xls 或 .xlsx)")
-    parser.add_argument("--rules", default=str(Path(__file__).parent.parent / "config" / "考勤规则.json"), help="考勤规则库 (.json)")
-    parser.add_argument("--exclusions", default=str(Path(__file__).parent.parent / "config" / "exclusions.json"), help="排除名单 (.json)")
-    parser.add_argument("--template", default=str(Path(__file__).parent.parent / "template" / "attendance_template.xlsm"), help="模板文件 (.xlsm)")
-    parser.add_argument("--out-dir", default="./交付", help="输出目录")
-    parser.add_argument("--no-pdf", action="store_true", help="跳过 PDF 导出")
-    args = parser.parse_args()
-
-    res = run_pipeline(
-        raw_path=Path(args.raw).resolve(),
-        roster_path=Path(args.roster).resolve(),
-        rules_path=Path(args.rules).resolve(),
-        exclusions_path=Path(args.exclusions).resolve(),
-        template_path=Path(args.template).resolve(),
-        out_dir=Path(args.out_dir).resolve(),
-        export_pdf=not args.no_pdf,
-    )
-    print("\n🎉 考勤月报处理全部完成！")
-    print(json.dumps(res, ensure_ascii=False, indent=2))
+    print("\n🎉 [阶段 6/6] 2026年09月 考勤月报交付全部顺利完成！")
+    print(f"  • Excel: {out_excel}")
+    print(f"  • 全量 PDF: {pdf_full}")
+    print(f"  • 重点关注 PDF: {pdf_focus}")
+    print("\n各业务分表人员统计:")
+    for a in AREA_ORDER:
+        print(f"  - {a}: {counts.get(a, 0)} 人")
+    print(f"  - 全量总计: {sum(counts.values())} 人")
 
 
 if __name__ == "__main__":
